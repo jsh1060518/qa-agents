@@ -1,0 +1,136 @@
+{
+ "id": "saved",
+ "title": "자주 쓰는 함수 목록",
+ "button": "자주 쓰는 함수 목록",
+ "intro": "팀에서 자주 쓰는 JQL을 저장해 둔 목록입니다. 복사해서 JIRA 검색창에 붙여넣거나, \"이 쿼리로 질문하기\"를 눌러 조건을 바꿔 달라고 하세요.",
+ "askLabel": "이 쿼리로 질문하기",
+ "searchHint": "쿼리 이름이나 조건으로 찾기",
+ "hintAll": "",
+ "wide": true,
+ "groups": [
+  {
+   "id": "team",
+   "title": "팀 이슈 현황",
+   "hint": "우리 팀이 등록하거나 맡은 이슈를 볼 때"
+  },
+  {
+   "id": "period",
+   "title": "기간별 등록 이슈",
+   "hint": "이번 주, 이번 달처럼 기간을 정해 팀이 등록한 이슈를 볼 때"
+  }
+ ],
+ "items": [
+  {
+   "group": "team",
+   "name": "팀이 등록한 미해결 이슈 (여러 프로젝트)",
+   "use": "QA_TEAM 그룹이 여러 프로젝트에 등록한 이슈 중 아직 해결되지 않은 것을 볼 때",
+   "formula": "project IN (PROJ_A, PROJ_B, PROJ_C) AND reporter IN membersOf(\"QA_TEAM\") AND resolution = Unresolved ORDER BY priority DESC, created DESC",
+   "parts": [
+    [
+     "project IN (…)",
+     "프로젝트 3개 (PROJ_A, PROJ_B, PROJ_C)"
+    ],
+    [
+     "reporter IN membersOf(\"QA_TEAM\")",
+     "보고자가 QA_TEAM 그룹 구성원"
+    ],
+    [
+     "resolution = Unresolved",
+     "아직 해결되지 않은 이슈"
+    ],
+    [
+     "ORDER BY priority DESC, created DESC",
+     "우선순위 높은 순, 같으면 최근에 등록한 순"
+    ]
+   ],
+   "saved": "2026-11-13",
+   "tip": "",
+   "note": "project IN (…): 프로젝트 3개 (PROJ_A, PROJ_B, PROJ_C) / reporter IN membersOf(\"QA_TEAM\"): 보고자가 QA_TEAM 그룹 구성원 / resolution = Unresolved: 아직 해결되지 않은 이슈 / ORDER BY priority DESC, created DESC: 우선순위 높은 순, 같으면 최근에 등록한 순",
+   "ask": "/JQL 아래 쿼리를 바탕으로 조건을 바꿔줘. (바꿀 내용: )\nproject IN (PROJ_A, PROJ_B, PROJ_C) AND reporter IN membersOf(\"QA_TEAM\") AND resolution = Unresolved ORDER BY priority DESC, created DESC"
+  },
+  {
+   "group": "period",
+   "name": "팀이 등록한 이슈: 2026-11-09 ~ 11-13 (날짜 고정)",
+   "use": "QA_TEAM 그룹이 2026-11-09(월)부터 2026-11-13(금) 사이에 등록한 이슈를 볼 때",
+   "formula": "reporter IN membersOf(\"QA_TEAM\") AND created >= \"2026-11-09\" AND created <= \"2026-11-13\" ORDER BY created DESC",
+   "parts": [
+    [
+     "reporter IN membersOf(\"QA_TEAM\")",
+     "보고자가 QA_TEAM 그룹 구성원"
+    ],
+    [
+     "created >= \"2026-11-09\"",
+     "2026-11-09(월) 0시 이후에 등록"
+    ],
+    [
+     "created <= \"2026-11-13\"",
+     "2026-11-13(금) 0시까지 등록"
+    ],
+    [
+     "ORDER BY created DESC",
+     "최근에 등록한 순"
+    ]
+   ],
+   "saved": "2026-11-13",
+   "tip": "날짜만 쓰면 그날 0시로 계산된다. 그래서 13일 당일에 등록한 이슈는 빠진다. 13일까지 넣으려면 created < \"2026-11-14\"로 쓴다.",
+   "note": "reporter IN membersOf(\"QA_TEAM\"): 보고자가 QA_TEAM 그룹 구성원 / created >= \"2026-11-09\": 2026-11-09(월) 0시 이후에 등록 / created <= \"2026-11-13\": 2026-11-13(금) 0시까지 등록 / ORDER BY created DESC: 최근에 등록한 순 / 날짜만 쓰면 그날 0시로 계산된다. 그래서 13일 당일에 등록한 이슈는 빠진다. 13일까지 넣으려면 created < \"2026-11-14\"로 쓴다.",
+   "ask": "/JQL 아래 쿼리를 바탕으로 조건을 바꿔줘. (바꿀 내용: )\nreporter IN membersOf(\"QA_TEAM\") AND created >= \"2026-11-09\" AND created <= \"2026-11-13\" ORDER BY created DESC"
+  },
+  {
+   "group": "period",
+   "name": "팀이 이번 주에 등록한 이슈 (주마다 자동)",
+   "use": "QA_TEAM 그룹이 이번 주에 등록한 이슈를 볼 때. 주가 바뀌면 자동으로 그 주로 바뀐다",
+   "formula": "reporter IN membersOf(\"QA_TEAM\") AND created >= startOfWeek() AND created <= endOfWeek() ORDER BY created DESC",
+   "parts": [
+    [
+     "reporter IN membersOf(\"QA_TEAM\")",
+     "보고자가 QA_TEAM 그룹 구성원"
+    ],
+    [
+     "created >= startOfWeek()",
+     "이번 주 첫날 0시 이후에 등록"
+    ],
+    [
+     "created <= endOfWeek()",
+     "이번 주 마지막 날 끝까지 등록 (마지막 날 당일 포함)"
+    ],
+    [
+     "ORDER BY created DESC",
+     "최근에 등록한 순"
+    ]
+   ],
+   "saved": "2026-11-13",
+   "tip": "한 주가 일요일에 시작하는지 월요일에 시작하는지는 JIRA 설정에 따른다. 지난주는 startOfWeek(-1)과 endOfWeek(-1)로 바꾼다.",
+   "note": "reporter IN membersOf(\"QA_TEAM\"): 보고자가 QA_TEAM 그룹 구성원 / created >= startOfWeek(): 이번 주 첫날 0시 이후에 등록 / created <= endOfWeek(): 이번 주 마지막 날 끝까지 등록 (마지막 날 당일 포함) / ORDER BY created DESC: 최근에 등록한 순 / 한 주가 일요일에 시작하는지 월요일에 시작하는지는 JIRA 설정에 따른다. 지난주는 startOfWeek(-1)과 endOfWeek(-1)로 바꾼다.",
+   "ask": "/JQL 아래 쿼리를 바탕으로 조건을 바꿔줘. (바꿀 내용: )\nreporter IN membersOf(\"QA_TEAM\") AND created >= startOfWeek() AND created <= endOfWeek() ORDER BY created DESC"
+  },
+  {
+   "group": "period",
+   "name": "팀이 이번 달에 등록한 이슈 (달마다 자동)",
+   "use": "QA_TEAM 그룹이 이번 달에 등록한 이슈를 볼 때. 달이 바뀌면 자동으로 그 달로 바뀐다",
+   "formula": "reporter IN membersOf(\"QA_TEAM\") AND created >= startOfMonth() AND created <= endOfMonth() ORDER BY created DESC",
+   "parts": [
+    [
+     "reporter IN membersOf(\"QA_TEAM\")",
+     "보고자가 QA_TEAM 그룹 구성원"
+    ],
+    [
+     "created >= startOfMonth()",
+     "이번 달 1일 0시 이후에 등록"
+    ],
+    [
+     "created <= endOfMonth()",
+     "이번 달 마지막 날 끝까지 등록"
+    ],
+    [
+     "ORDER BY created DESC",
+     "최근에 등록한 순"
+    ]
+   ],
+   "saved": "2026-11-13",
+   "tip": "지난달은 startOfMonth(-1)과 endOfMonth(-1)로 바꾼다.",
+   "note": "reporter IN membersOf(\"QA_TEAM\"): 보고자가 QA_TEAM 그룹 구성원 / created >= startOfMonth(): 이번 달 1일 0시 이후에 등록 / created <= endOfMonth(): 이번 달 마지막 날 끝까지 등록 / ORDER BY created DESC: 최근에 등록한 순 / 지난달은 startOfMonth(-1)과 endOfMonth(-1)로 바꾼다.",
+   "ask": "/JQL 아래 쿼리를 바탕으로 조건을 바꿔줘. (바꿀 내용: )\nreporter IN membersOf(\"QA_TEAM\") AND created >= startOfMonth() AND created <= endOfMonth() ORDER BY created DESC"
+  }
+ ]
+}

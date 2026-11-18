@@ -1,0 +1,1714 @@
+<!doctype html>
+<html lang="ko">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>QA 업무 에이전트</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: app shell like work-agent hubs — left nav (agents + tool) · centered work area.
+   Home = "what do you want to do" task cards; agent = centered chat with starters; compare = numbered steps, advanced settings folded. */
+:root{
+  --bg:#f7f6f4; --surface:#ffffff; --side:#efece8; --ink:#1d1b19; --muted:#6b645d; --line:#e2ddd7;
+  --accent:#e8540c; --accent-ink:#ffffff; --accent-soft:#fdeee5; --code-bg:#f2efeb;
+  --pass:#3f8f2b; --fail:#d42020; --na:#a8a29c; --block:#3a3a3a; --skip:#c86bc4; --dash:#e07a2f; --inc:#5aaed8;
+  --f-body:"IBM Plex Sans KR","Apple SD Gothic Neo","Malgun Gothic",system-ui,sans-serif;
+  --f-mono:"IBM Plex Mono",ui-monospace,"SFMono-Regular",Menlo,Consolas,monospace;
+  --s-1:4px; --s-2:8px; --s-3:12px; --s-4:16px; --s-5:24px; --s-6:36px; --s-7:56px;
+  --r:10px; --r-sm:6px;
+  --shadow:0 1px 2px rgba(29,27,25,.05), 0 4px 14px rgba(29,27,25,.05);
+}
+@media (prefers-color-scheme: dark){ :root:not([data-theme="light"]){
+  --bg:#161412; --surface:#201d1a; --side:#1b1917; --ink:#efebe6; --muted:#a59d94; --line:#36312c;
+  --accent:#ff7a33; --accent-ink:#1a0f08; --accent-soft:#3a2416; --code-bg:#2a2622;
+  --shadow:0 1px 2px rgba(0,0,0,.3);
+  color-scheme:dark }}
+:root[data-theme="dark"]{
+  --bg:#161412; --surface:#201d1a; --side:#1b1917; --ink:#efebe6; --muted:#a59d94; --line:#36312c;
+  --accent:#ff7a33; --accent-ink:#1a0f08; --accent-soft:#3a2416; --code-bg:#2a2622;
+  --shadow:0 1px 2px rgba(0,0,0,.3);
+  color-scheme:dark }
+
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+html,body{background:var(--bg)}
+body{color:var(--ink); font-family:var(--f-body); font-size:15px; line-height:1.6}
+h1,h2,h3{line-height:1.3; text-wrap:balance; margin:0}
+code,.mono{font-family:var(--f-mono); font-size:.88em}
+button{font:inherit; color:inherit}
+:focus-visible{outline:2px solid var(--accent); outline-offset:2px}
+.sr{position:absolute; width:1px; height:1px; overflow:hidden; clip:rect(0 0 0 0); white-space:nowrap}
+.muted{color:var(--muted); font-size:13px}
+.ico{width:20px; height:20px; flex:none; stroke:currentColor; fill:none; stroke-width:1.8; stroke-linecap:round; stroke-linejoin:round}
+
+/* ---------- app shell ---------- */
+.app{display:grid; grid-template-columns:248px minmax(0,1fr); min-height:100vh}
+.side{position:sticky; top:0; height:100vh; display:flex; flex-direction:column; gap:var(--s-1); background:var(--side); border-right:1px solid var(--line); padding:var(--s-4) var(--s-3); padding-left:max(var(--s-3), env(safe-area-inset-left,0px)); overflow-y:auto}
+.brand{display:flex; gap:var(--s-2); align-items:center; padding:var(--s-2) var(--s-2) var(--s-4); font-weight:700; font-size:16px}
+.brand-mark{width:28px; height:28px; border-radius:8px; background:var(--accent); color:var(--accent-ink); display:grid; place-items:center; font-size:13px; font-weight:700; flex:none}
+.nav-label{font-size:11px; font-weight:600; color:var(--muted); letter-spacing:.06em; padding:var(--s-4) var(--s-2) var(--s-1)}
+.nav{display:flex; flex-direction:column; gap:2px}
+.tab,.nav-home{display:flex; gap:10px; align-items:center; width:100%; text-align:left; padding:8px 10px; border:0; border-radius:var(--r-sm); background:none; cursor:pointer; font-size:14px; font-weight:500; color:var(--ink)}
+.tab:hover,.nav-home:hover{background:color-mix(in srgb, var(--ink) 6%, transparent)}
+.tab[aria-current="page"],.nav-home[aria-current="page"]{background:var(--surface); box-shadow:var(--shadow); color:var(--accent); font-weight:600}
+.tab span{min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+.side-foot{margin-top:auto; padding-top:var(--s-4)}
+.proj-btn{display:flex; flex-direction:column; align-items:flex-start; gap:2px; width:100%; text-align:left; padding:10px 12px; border:1px solid var(--line); border-radius:var(--r-sm); background:var(--surface); cursor:pointer}
+.proj-btn:hover{border-color:var(--accent)}
+.proj-btn b{font-size:13px; display:flex; gap:6px; align-items:center}
+.proj-btn span{font-size:12px; color:var(--muted); line-height:1.4}
+.main{min-width:0; padding-left:max(16px, env(safe-area-inset-left,0px)); padding-right:max(16px, env(safe-area-inset-right,0px))}
+.page{max-width:960px; margin:0 auto; padding-block:var(--s-6) var(--s-7)}
+.page.narrow{max-width:820px}
+
+/* ---------- home ---------- */
+.hello{padding:var(--s-5) 0 var(--s-5)}
+.hello h1{font-size:clamp(26px,3.6vw,34px); font-weight:700}
+.hello p{margin:var(--s-2) 0 0; color:var(--muted); max-width:60ch}
+.picker{display:grid; grid-template-columns:repeat(auto-fill,minmax(270px,1fr)); gap:var(--s-3)}
+.card{display:flex; flex-direction:column; gap:var(--s-3); padding:var(--s-4); background:var(--surface); border:1px solid var(--line); border-radius:var(--r); box-shadow:var(--shadow); min-width:0}
+.card-open{display:flex; gap:var(--s-3); align-items:flex-start; text-align:left; background:none; border:0; padding:0; cursor:pointer}
+.card-ico{width:40px; height:40px; border-radius:10px; background:var(--accent-soft); color:var(--accent); display:grid; place-items:center; flex:none}
+.card-ico .ico{width:22px; height:22px}
+.card-t{display:flex; flex-direction:column; gap:2px; min-width:0}
+.card-t b{font-size:16px}
+.card-t small{font-size:12px; color:var(--muted)}
+.card-d{margin:0; font-size:14px; color:var(--muted)}
+.card-ex{display:flex; flex-direction:column; gap:6px}
+.chip-ex{text-align:left; font-size:13px; padding:7px 10px; border:1px solid var(--line); border-radius:var(--r-sm); background:var(--bg); cursor:pointer; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+.chip-ex:hover{border-color:var(--accent); color:var(--accent)}
+.card-go{align-self:flex-start; margin-top:auto; font-size:13px; font-weight:600; color:var(--accent); background:none; border:0; padding:0; cursor:pointer}
+.card:hover{border-color:color-mix(in srgb, var(--accent) 45%, var(--line))}
+.steps3{display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:var(--s-3); margin:var(--s-6) 0 0; padding:0; list-style:none; counter-reset:s}
+.steps3 li{counter-increment:s; display:flex; gap:var(--s-3); align-items:flex-start; font-size:14px; color:var(--muted)}
+.steps3 li::before{content:counter(s); width:24px; height:24px; border-radius:50%; background:var(--ink); color:var(--bg); display:grid; place-items:center; font-size:12px; font-weight:700; flex:none}
+.steps3 b{color:var(--ink); display:block}
+.help{margin-top:var(--s-6); border-top:1px solid var(--line); padding-top:var(--s-4)}
+.help > details{border-bottom:1px solid var(--line)}
+.help summary{cursor:pointer; padding:var(--s-3) 0; font-weight:600; font-size:15px}
+.help .help-body{padding:0 0 var(--s-4)}
+.help ol{margin:0; padding-left:1.3em; display:grid; gap:4px; font-size:14px}
+.tbl-wrap{overflow-x:auto; border:1px solid var(--line); border-radius:var(--r-sm); background:var(--surface)}
+.tbl{width:100%; border-collapse:collapse; font-size:14px; min-width:620px}
+.tbl th{background:var(--code-bg); text-align:left; font-weight:600; padding:9px 14px; font-size:13px}
+.tbl td{padding:9px 14px; border-top:1px solid var(--line); vertical-align:top}
+.tbl td:nth-child(2){font-weight:600; white-space:nowrap; color:var(--accent)}
+.tbl td:last-child{color:var(--muted)}
+
+/* ---------- agent (chat) ---------- */
+.agent-head{display:flex; gap:var(--s-3); align-items:flex-start; justify-content:space-between; flex-wrap:wrap; padding-bottom:var(--s-4); border-bottom:1px solid var(--line)}
+.agent-id{display:flex; gap:var(--s-3); align-items:center; min-width:0}
+.agent-id h1{font-size:20px}
+.agent-id p{margin:2px 0 0; font-size:13px; color:var(--muted)}
+.head-tools{display:flex; gap:var(--s-2); align-items:center; flex-wrap:wrap}
+.lib-btns{display:flex; gap:6px; flex-wrap:wrap}
+.lib-btn{display:inline-flex; gap:6px; align-items:center; padding:6px 12px; border:1px solid var(--line); border-radius:999px; background:var(--surface); cursor:pointer; font-size:13px; font-weight:600}
+.lib-btn:hover{border-color:var(--accent); color:var(--accent)}
+.lib-btn[aria-expanded="true"]{background:var(--accent); color:var(--accent-ink); border-color:var(--accent)}
+.about{position:relative}
+.about summary{list-style:none; cursor:pointer; padding:6px 12px; border:1px solid var(--line); border-radius:999px; background:var(--surface); font-size:13px; font-weight:500}
+.about summary::-webkit-details-marker{display:none}
+.about[open] summary{border-color:var(--accent); color:var(--accent)}
+.about-body{position:absolute; right:0; top:calc(100% + 6px); z-index:5; width:min(320px, 80vw); background:var(--surface); border:1px solid var(--line); border-radius:var(--r); box-shadow:var(--shadow); padding:var(--s-4); display:flex; flex-direction:column; gap:var(--s-3); font-size:13px}
+.label{font-size:12px; color:var(--muted); font-weight:600; margin-bottom:6px}
+.files{display:flex; flex-wrap:wrap; gap:6px}
+.file{font-family:var(--f-mono); font-size:11px; padding:2px 7px; border-radius:4px; background:var(--code-bg); border:1px solid var(--line)}
+.guard{font-size:12px; color:var(--muted); margin:0}
+
+.chat{display:flex; flex-direction:column; gap:var(--s-4); min-width:0; padding-top:var(--s-5)}
+.log{display:flex; flex-direction:column; gap:var(--s-4); min-width:0}
+.empty{display:flex; flex-direction:column; align-items:center; gap:var(--s-3); padding:var(--s-6) 0 var(--s-4); text-align:center}
+.empty .card-ico{width:52px; height:52px; border-radius:14px}
+.empty .card-ico .ico{width:28px; height:28px}
+.empty h3{font-size:20px}
+.empty > p{margin:0; color:var(--muted); font-size:14px; max-width:52ch}
+.starters{display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:var(--s-2); width:100%; margin-top:var(--s-3); text-align:left}
+.ex{text-align:left; background:var(--surface); border:1px solid var(--line); border-radius:var(--r); padding:var(--s-3) var(--s-4); cursor:pointer; font-size:14px; box-shadow:var(--shadow); display:flex; flex-direction:column; gap:2px; min-width:0}
+.ex:hover{border-color:var(--accent)}
+.ex small{font-size:12px; color:var(--accent); font-weight:600}
+.ex span{display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden}
+.ex.lib-ex small{color:var(--muted)}
+.msg{min-width:0}
+.msg.user{align-self:flex-end; max-width:85%; background:var(--accent-soft); border-radius:16px 16px 4px 16px; padding:var(--s-3) var(--s-4); white-space:pre-wrap; word-break:break-word; font-size:14px}
+.msg.bot{background:var(--surface); border:1px solid var(--line); border-radius:var(--r); padding:var(--s-4) var(--s-5); overflow-wrap:anywhere; box-shadow:var(--shadow)}
+.msg.bot.pending{color:var(--muted)}
+.msg.bot .err{color:var(--fail); font-size:13px; margin-top:var(--s-2)}
+.md > :first-child{margin-top:0} .md > :last-child{margin-bottom:0}
+.md h1,.md h2,.md h3,.md h4{font-size:16px; margin:1.1em 0 .5em}
+.md p{margin:.6em 0}
+.md ul,.md ol{margin:.5em 0; padding-left:1.4em}
+.md code{background:var(--code-bg); padding:1px 5px; border-radius:3px}
+.md pre{position:relative; margin:.7em 0; padding:var(--s-3) var(--s-4); background:var(--code-bg); border:1px solid var(--line); border-radius:var(--r-sm); overflow-x:auto; font-family:var(--f-mono); font-size:13px; line-height:1.65}
+.md pre code{background:none; padding:0; white-space:pre}
+.md .tscroll{overflow-x:auto; margin:.7em 0}
+.md table{border-collapse:collapse; font-size:13px; min-width:100%}
+.md th{background:var(--accent); color:var(--accent-ink); text-align:left; padding:6px 10px; font-weight:600; white-space:nowrap}
+.md td{border:1px solid var(--line); padding:6px 10px; vertical-align:top}
+.md td.merged{vertical-align:middle; background:color-mix(in srgb, var(--accent) 5%, transparent)}
+.md blockquote{margin:.6em 0; padding-left:var(--s-3); border-left:3px solid var(--line); color:var(--muted)}
+.cpy{position:absolute; top:6px; right:6px; font-size:11px; padding:2px 8px; border:1px solid var(--line); border-radius:4px; background:var(--surface); cursor:pointer; font-family:var(--f-body)}
+.cpy:hover{border-color:var(--accent); color:var(--accent)}
+
+.composer{position:sticky; bottom:calc(env(safe-area-inset-bottom,0px) + 12px); background:var(--surface); border:1px solid var(--line); border-radius:16px; box-shadow:0 6px 24px rgba(29,27,25,.08); padding:var(--s-2) var(--s-3) var(--s-3); display:flex; flex-direction:column; gap:var(--s-2)}
+.composer:focus-within{border-color:var(--accent)}
+.cmd-list{display:flex; gap:6px; overflow-x:auto; padding:var(--s-1) 0 2px; scrollbar-width:thin}
+.cmd{display:inline-flex; gap:6px; align-items:baseline; flex:none; padding:4px 10px; border:1px solid var(--line); border-radius:999px; background:var(--bg); cursor:pointer; font-size:12px; white-space:nowrap}
+.cmd:hover{border-color:var(--accent)}
+.cmd code{color:var(--accent); font-weight:500}
+.cmd span{color:var(--muted)}
+.composer textarea{width:100%; min-height:64px; max-height:240px; resize:vertical; border:0; background:transparent; font:inherit; font-size:15px; color:var(--ink); padding:var(--s-1) var(--s-1)}
+.composer textarea:focus{outline:none}
+.row{display:flex; gap:var(--s-2); justify-content:space-between; align-items:center; flex-wrap:wrap}
+.hint{font-size:12px; color:var(--muted)}
+.btns{display:flex; gap:var(--s-2)}
+.send,.stop,.clear{padding:7px 16px; border-radius:999px; font-weight:600; font-size:14px; cursor:pointer}
+.send{background:var(--accent); color:var(--accent-ink); border:1px solid var(--accent)}
+.send:disabled{opacity:.45; cursor:default}
+.stop,.clear{background:transparent; border:1px solid var(--line)}
+.stop:hover,.clear:hover{border-color:var(--accent)}
+.notice{margin:0; padding:var(--s-3) var(--s-4); background:var(--accent-soft); border-radius:var(--r-sm); font-size:14px}
+
+/* collections shown in the thread */
+.lib{background:var(--surface); border:1px solid var(--accent); border-radius:var(--r); padding:var(--s-4) var(--s-5); display:flex; flex-direction:column; gap:var(--s-3); min-width:0; scroll-margin-top:12px}
+.lib-head{display:flex; gap:var(--s-3); justify-content:space-between; align-items:flex-start}
+.lib-head h3{font-size:17px}
+.lib-head .mini{flex:none; white-space:nowrap}
+.lib-head p{margin:4px 0 0; font-size:13px; color:var(--muted)}
+.lib-assume{margin:0; font-size:12px; color:var(--muted); background:var(--code-bg); padding:6px 10px; border-radius:4px}
+.lib-tips summary{cursor:pointer; font-size:13px; font-weight:600}
+.lib-tips ul{margin:6px 0 0; padding-left:1.2em; font-size:13px; display:grid; gap:3px}
+.lib-tools{display:flex; flex-wrap:wrap; gap:var(--s-2); justify-content:space-between; align-items:center}
+.lib-tools input{font:inherit; font-size:13px; padding:6px 10px; border:1px solid var(--line); border-radius:999px; background:var(--bg); color:var(--ink); width:240px; max-width:100%}
+.lib-hint{margin:0; font-size:13px; color:var(--muted)}
+.lib-list{display:grid; grid-template-columns:repeat(auto-fill,minmax(300px,1fr)); gap:var(--s-3)}
+.lib-list.wide{grid-template-columns:minmax(0,1fr)}
+.fn{border:1px solid var(--line); border-radius:var(--r-sm); padding:var(--s-3); display:flex; flex-direction:column; gap:6px; min-width:0; background:var(--bg)}
+.fn-top{display:flex; flex-wrap:wrap; gap:6px; align-items:baseline}
+.fn-name{font-family:var(--f-mono); font-weight:500; font-size:14px; color:var(--accent)}
+.fn-ver{font-size:11px; padding:1px 7px; border-radius:999px; border:1px solid var(--line); color:var(--muted); white-space:nowrap}
+.fn-ver.v365{border-color:var(--dash); color:var(--dash)}
+.fn-use{margin:0; font-size:14px; font-weight:600}
+.fn-code{position:relative; margin:0; padding:8px 54px 8px 10px; background:var(--surface); border:1px solid var(--line); border-radius:4px; font-family:var(--f-mono); font-size:12px; line-height:1.6; white-space:pre-wrap; word-break:break-all}
+.fn-note{margin:0; font-size:12px; color:var(--muted)}
+.fn-parts{margin:0; display:grid; grid-template-columns:auto minmax(0,1fr); gap:4px 14px; font-size:13px}
+.fn-parts dt{font-family:var(--f-mono); font-size:12px; color:var(--accent); overflow-wrap:anywhere}
+.fn-parts dd{margin:0; color:var(--ink)}
+.fn-ask{align-self:flex-start; margin-top:auto; font-size:12px; padding:4px 10px; border:1px solid var(--line); border-radius:999px; background:var(--surface); cursor:pointer; font-weight:600}
+.fn-ask:hover{border-color:var(--accent); color:var(--accent)}
+
+/* ---------- shared controls ---------- */
+.mini{padding:6px 12px; border-radius:999px; border:1px solid var(--line); background:var(--surface); cursor:pointer; font-size:13px; font-weight:500}
+.mini:hover{border-color:var(--accent); color:var(--accent)}
+.mini:disabled{opacity:.5; cursor:default}
+.mini.strong{border-color:var(--accent); color:var(--accent); font-weight:600}
+.chk{display:flex; gap:8px; align-items:center; font-size:13px}
+.filters{display:flex; flex-wrap:wrap; gap:6px}
+.flt{padding:4px 12px; border:1px solid var(--line); border-radius:999px; font-size:13px; cursor:pointer; background:var(--surface)}
+.flt[aria-selected="true"]{background:var(--ink); color:var(--bg); border-color:var(--ink)}
+input[type=text],input[type=number],input[type=search],select{font:inherit; font-size:13px; padding:6px 8px; border:1px solid var(--line); border-radius:var(--r-sm); background:var(--surface); color:var(--ink)}
+
+/* ---------- compare (numbered steps) ---------- */
+.page-head{display:flex; gap:var(--s-3); align-items:center; padding-bottom:var(--s-4); border-bottom:1px solid var(--line)}
+.page-head h1{font-size:20px}
+.page-head p{margin:2px 0 0; font-size:13px; color:var(--muted)}
+.step{background:var(--surface); border:1px solid var(--line); border-radius:var(--r); box-shadow:var(--shadow); padding:var(--s-4) var(--s-5) var(--s-5); margin-top:var(--s-4); display:flex; flex-direction:column; gap:var(--s-4); min-width:0}
+.step-h{display:flex; gap:var(--s-3); align-items:flex-start}
+.step-n{width:28px; height:28px; border-radius:50%; background:var(--accent); color:var(--accent-ink); display:grid; place-items:center; font-weight:700; font-size:14px; flex:none}
+.step-h h2{font-size:17px}
+.step-h p{margin:2px 0 0; font-size:13px; color:var(--muted)}
+.adv{border:1px dashed var(--line); border-radius:var(--r-sm); padding:var(--s-2) var(--s-4)}
+.adv > summary{cursor:pointer; font-size:14px; font-weight:600; padding:var(--s-2) 0}
+.adv > summary .muted{font-weight:400}
+.adv-body{display:flex; flex-direction:column; gap:var(--s-4); padding:var(--s-2) 0 var(--s-3)}
+.adv-h{font-size:13px; font-weight:700; margin:0 0 var(--s-2)}
+
+.cmp-sources{display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:var(--s-4)}
+.src{display:flex; flex-direction:column; gap:var(--s-3); min-width:0}
+.src-head{display:flex; gap:var(--s-3); align-items:center}
+.src-head div{display:flex; flex-direction:column; line-height:1.35}
+.src-head span:not(.tag){font-size:12px; color:var(--muted)}
+.tag{font-family:var(--f-mono); font-weight:500; width:28px; height:28px; border-radius:8px; display:grid; place-items:center; background:var(--accent); color:var(--accent-ink); flex:none}
+#src-b .tag{background:var(--ink); color:var(--bg)}
+.drop{position:relative; display:flex; flex-direction:column; align-items:center; gap:4px; padding:var(--s-5) var(--s-4); border:2px dashed var(--line); border-radius:var(--r); cursor:pointer; text-align:center; background:var(--bg)}
+.drop:hover,.drop.over{border-color:var(--accent); background:var(--accent-soft)}
+.drop input{position:absolute; width:1px; height:1px; opacity:0}
+.drop-t{font-weight:600; font-size:14px; display:flex; gap:6px; align-items:center}
+.drop-s{font-size:12px; color:var(--muted); word-break:break-all}
+.src-info{margin:0; font-size:12px; color:var(--muted)}
+.src-more summary{cursor:pointer; font-size:13px; color:var(--muted)}
+.src-more[open] summary{margin-bottom:var(--s-2)}
+.src-opts{display:flex; flex-wrap:wrap; gap:var(--s-3); align-items:center; font-size:13px}
+.src-opts select{max-width:180px}
+.src-opts input[type=number]{width:64px}
+.paste textarea{width:100%; min-height:90px; margin:var(--s-2) 0; font-family:var(--f-mono); font-size:12px; border:1px solid var(--line); border-radius:var(--r-sm); background:var(--bg); color:var(--ink); padding:var(--s-2)}
+.paste summary{cursor:pointer; font-size:13px; color:var(--muted)}
+
+.cats{display:flex; flex-wrap:wrap; gap:var(--s-3); align-items:center}
+.cat-pick select{font-size:15px; font-weight:600; padding:9px 36px 9px 12px; min-width:240px; max-width:100%; border:1px solid var(--accent); border-radius:var(--r-sm); background:var(--surface); cursor:pointer}
+.cat-hint{font-size:13px; color:var(--muted)}
+.cat-actions{display:flex; flex-wrap:wrap; gap:var(--s-2); align-items:center}
+#preset-msg:empty,#rule-msg:empty{display:none}
+#preset-msg,#rule-msg{margin:0}
+.cat-panel{display:flex; flex-direction:column; gap:var(--s-2)}
+.cat-row{display:flex; flex-wrap:wrap; gap:var(--s-3); align-items:center; font-size:13px}
+.cat-row select{max-width:200px}
+.cat-row .grow{display:flex; gap:6px; align-items:center; flex:1; min-width:220px}
+.cat-row .grow input{flex:1; min-width:0}
+
+.cmp-settings{display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1.3fr); gap:var(--s-5)}
+.set-col{display:flex; flex-direction:column; gap:var(--s-2); min-width:0}
+.keys{display:flex; flex-wrap:wrap; gap:6px}
+.key{padding:4px 11px; border:1px solid var(--line); border-radius:999px; font-size:12px; cursor:pointer; background:var(--bg)}
+.key[aria-pressed="true"]{background:var(--accent); color:var(--accent-ink); border-color:var(--accent)}
+.map-wrap{max-height:260px; overflow:auto; border:1px solid var(--line); border-radius:var(--r-sm)}
+.map{width:100%; border-collapse:collapse; font-size:12px}
+.map td{padding:5px 8px; border-top:1px solid var(--line)}
+.map tr:first-child td{border-top:0}
+.map select{font-size:12px; max-width:160px; padding:3px 6px}
+#map-save{align-self:flex-start}
+.opts{display:flex; flex-wrap:wrap; gap:var(--s-2) var(--s-5)}
+.tol{display:flex; gap:6px; align-items:center; font-size:13px}
+.tol input{width:90px}
+.run-row{display:flex; flex-wrap:wrap; gap:var(--s-3); align-items:center}
+.run{padding:10px 26px; font-size:15px}
+.rule-list{margin:0; padding-left:1.1em; font-size:13px; display:grid; grid-template-columns:repeat(auto-fill,minmax(240px,1fr)); gap:4px 24px}
+.rule-list li{min-width:0}
+.rule-list code{color:var(--accent)}
+.rule-del{margin-left:6px; font-size:11px; padding:1px 8px; border:1px solid var(--line); border-radius:999px; background:var(--surface); cursor:pointer}
+.rule-del:hover{border-color:var(--fail); color:var(--fail)}
+.rules-body{display:flex; flex-direction:column; gap:var(--s-3)}
+.rule-form{display:flex; flex-wrap:wrap; gap:var(--s-3); align-items:center; font-size:13px}
+.rule-form .grow{display:flex; gap:6px; align-items:center; flex:1; min-width:240px}
+.rule-form .grow input{flex:1; min-width:0}
+
+.batch{display:flex; flex-direction:column; gap:var(--s-3)}
+.batch-head{display:flex; flex-wrap:wrap; gap:var(--s-3); align-items:baseline}
+.batch-head .label{margin:0; font-size:14px; color:var(--ink); font-weight:700}
+.cmp-result{display:flex; flex-direction:column; gap:var(--s-3)}
+.res-cat{margin:0; font-size:14px; font-weight:600}
+.res-cat:empty{display:none}
+.sum{display:grid; grid-template-columns:repeat(6,minmax(0,1fr)); gap:var(--s-2)}
+.stat{background:var(--bg); border:1px solid var(--line); border-radius:var(--r-sm); padding:var(--s-3); display:flex; flex-direction:column}
+.stat b{font-size:22px; font-variant-numeric:tabular-nums; line-height:1.2}
+.stat span{font-size:12px; color:var(--muted)}
+.stat.bad b{color:var(--fail)} .stat.warn b{color:var(--dash)} .stat.ok b{color:var(--pass)}
+.res-bar{display:flex; flex-wrap:wrap; gap:var(--s-2); justify-content:space-between; align-items:center}
+#res-q{min-width:0; width:260px; max-width:100%; border-radius:999px; padding:6px 12px}
+.res-actions{display:flex; flex-wrap:wrap; gap:var(--s-2); align-items:center}
+.res-wrap{overflow:auto; max-height:70vh; border:1px solid var(--line); border-radius:var(--r-sm); background:var(--surface)}
+.res{border-collapse:collapse; font-size:13px; min-width:100%}
+.res th{position:sticky; top:0; background:var(--code-bg); text-align:left; padding:7px 10px; white-space:nowrap; font-weight:600; z-index:1}
+.res td{padding:7px 10px; border-top:1px solid var(--line); vertical-align:top; white-space:nowrap}
+.res td.k{font-family:var(--f-mono); font-size:12px}
+.res td.diff{background:color-mix(in srgb, var(--fail) 10%, transparent)}
+.res td.diff .a{text-decoration:line-through; color:var(--muted)}
+.res td.diff .b{font-weight:600; color:var(--fail)}
+.pill{display:inline-block; padding:1px 8px; border-radius:999px; font-size:11px; font-weight:600; color:#fff}
+.pill.diff{background:var(--fail)} .pill.onlyA{background:var(--dash)} .pill.onlyB{background:var(--inc); color:#111} .pill.same{background:var(--pass)} .pill.dup{background:var(--skip)}
+
+/* ---------- project info dialog ---------- */
+.proj-dialog{border:0; border-radius:var(--r); padding:0; width:min(720px, calc(100vw - 32px)); background:var(--surface); color:var(--ink); box-shadow:0 20px 60px rgba(0,0,0,.25)}
+.proj-dialog::backdrop{background:rgba(20,18,16,.45)}
+.proj-form{display:flex; flex-direction:column; gap:var(--s-4); padding:var(--s-5)}
+.proj-top{display:flex; justify-content:space-between; gap:var(--s-3); align-items:flex-start}
+.proj-top h2{font-size:18px}
+.proj-top p{margin:4px 0 0; font-size:13px; color:var(--muted)}
+.proj-fields{display:grid; grid-template-columns:repeat(auto-fill,minmax(200px,1fr)); gap:var(--s-3)}
+.pf{display:flex; flex-direction:column; gap:4px; font-size:12px; color:var(--muted); font-weight:600}
+.pf input{width:100%; font-weight:400; font-size:14px}
+.proj-actions{display:flex; flex-wrap:wrap; gap:var(--s-3); align-items:center}
+
+/* ---------- responsive ---------- */
+@media (max-width:900px){
+  .app{grid-template-columns:minmax(0,1fr)}
+  .side{position:sticky; top:0; z-index:20; height:auto; flex-direction:row; align-items:center; gap:var(--s-2); padding:var(--s-2) max(12px, env(safe-area-inset-right,0px)) var(--s-2) max(12px, env(safe-area-inset-left,0px)); padding-top:calc(env(safe-area-inset-top,0px) + 8px); border-right:0; border-bottom:1px solid var(--line); overflow-x:auto; overflow-y:hidden}
+  .brand{padding:0 var(--s-2) 0 0}
+  .brand > span:last-child,.nav-label{display:none}
+  .nav{flex-direction:row; gap:4px}
+  .tab,.nav-home{width:auto; white-space:nowrap; padding:6px 10px}
+  .side-foot{margin:0; padding:0}
+  .proj-btn{flex-direction:row; padding:6px 10px; white-space:nowrap}
+  .proj-btn span{display:none}
+  .cmp-sources,.cmp-settings{grid-template-columns:minmax(0,1fr)}
+  .sum{grid-template-columns:repeat(3,minmax(0,1fr))}
+  .steps3{grid-template-columns:minmax(0,1fr)}
+}
+@media (max-width:520px){
+  .starters{grid-template-columns:minmax(0,1fr)}
+  .sum{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .msg.user{max-width:100%}
+  .step{padding:var(--s-4)}
+}
+</style>
+
+<div class="app">
+  <!-- left navigation: home · agents · tool · project info -->
+  <aside class="side" aria-label="메뉴">
+    <div class="brand"><span class="brand-mark">QA</span><span>QA 업무 에이전트</span></div>
+    <button class="nav-home" type="button" id="back"><svg class="ico" viewBox="0 0 24 24"><path d="M3 11l9-7 9 7v9a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/></svg><span>홈</span></button>
+    <div class="nav-label">에이전트</div>
+    <nav class="nav" id="tabs" aria-label="에이전트"></nav>
+    <div class="nav-label">도구</div>
+    <nav class="nav" id="tools-nav" aria-label="도구"></nav>
+    <div class="side-foot">
+      <button class="proj-btn" type="button" id="proj-open"><b><svg class="ico" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>프로젝트 정보</b><span id="proj-summary"></span></button>
+    </div>
+    <div id="topbar" hidden></div>
+  </aside>
+
+  <main class="main">
+    <!-- HOME -->
+    <section id="home" class="page">
+      <div class="hello">
+        <h1>무엇을 도와드릴까요?</h1>
+        <p>하고 싶은 일을 고르세요. 각 에이전트는 정해진 양식에 맞춰서만 답합니다.</p>
+      </div>
+      <div class="picker" id="picker"></div>
+
+      <ol class="steps3">
+        <li><div><b>하고 싶은 일 고르기</b>위 카드나 왼쪽 메뉴에서 고릅니다.</div></li>
+        <li><div><b>그대로 적어서 보내기</b>명령어(/)를 몰라도 됩니다. 하고 싶은 일을 그대로 적으면 됩니다.</div></li>
+        <li><div><b>복사해서 쓰기</b>답변의 "복사" 버튼으로 JIRA·엑셀·메신저에 붙여넣습니다.</div></li>
+      </ol>
+
+      <div class="help">
+        <details>
+          <summary>TC 작성 어미 규칙</summary>
+          <div class="help-body">
+            <div class="tbl-wrap">
+              <table class="tbl">
+                <thead><tr><th>항목</th><th>끝맺음</th><th>예시</th></tr></thead>
+                <tbody>
+                  <tr><td>Precondition (테스트 조건)</td><td>~상태</td><td>1. 로그인된 상태<br>2. 우편함에 보상 우편이 1개 이상 있는 상태</td></tr>
+                  <tr><td>Test Step (실행 순서)</td><td>~확인</td><td>1. 우편함에서 보상 수령 확인<br>2. 수령 후 인벤토리 내 아이템 수량 확인</td></tr>
+                  <tr><td>Expected Result (TC 기대 결과)</td><td>~다.</td><td>보상 수령 후 해당 우편이 우편함 목록에서 삭제된다.</td></tr>
+                  <tr><td>확인항목 (CheckList)</td><td>~확인</td><td>우편 보상 수령 시 인벤토리 수량 증가 확인</td></tr>
+                  <tr><td>참고 사항</td><td>~합니다.</td><td>보상 아이템이 많아 등급별 대표 아이템을 샘플로 정해 확인합니다.</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </details>
+        <details>
+          <summary>Claude 프로젝트로 쓰는 법 (이 페이지 없이 쓰고 싶을 때)</summary>
+          <div class="help-body">
+            <ol>
+              <li>claude.ai 왼쪽 메뉴에서 <b>프로젝트 → 새 프로젝트</b>를 만듭니다.</li>
+              <li>프로젝트 이름을 에이전트 이름으로 입력합니다.</li>
+              <li><b>지침</b>에 <code>instructions.md</code> 내용을 붙여넣습니다.</li>
+              <li><b>지식(파일)</b>에 나머지 파일을 올리고 새 채팅에서 명령어로 사용합니다.</li>
+            </ol>
+          </div>
+        </details>
+      </div>
+    </section>
+
+    <!-- AGENT -->
+    <section id="agent" class="page narrow" hidden>
+      <header class="agent-head">
+        <div class="agent-id"><span class="card-ico" id="a-icon"></span><div><h1 id="a-name"></h1><p id="a-role"></p></div></div>
+        <div class="head-tools">
+          <div id="a-libs-wrap" hidden><div class="lib-btns" id="a-libs"></div></div>
+          <details class="about">
+            <summary>이 에이전트 정보</summary>
+            <div class="about-body">
+              <p class="guard" id="a-guard"></p>
+              <div><div class="label">따르는 지침·지식 파일</div><div class="files" id="a-files"></div></div>
+            </div>
+          </details>
+        </div>
+      </header>
+
+      <div class="chat">
+        <p class="notice" id="unavail" hidden>이 화면에서는 Claude에게 질문할 수 없습니다. claude.ai에 로그인한 상태에서 이 페이지를 열어 주세요.</p>
+        <div class="log" id="log" aria-live="polite"></div>
+        <form class="composer" id="composer">
+          <div class="cmd-list" id="a-cmds" aria-label="빠른 명령어"></div>
+          <label for="q" class="sr">요청</label>
+          <textarea id="q" placeholder="하고 싶은 일을 그대로 적어 주세요"></textarea>
+          <div class="row">
+            <span class="hint">Ctrl+Enter로 보내기</span>
+            <div class="btns">
+              <button class="clear" type="button" id="clear">새 대화</button>
+              <button class="stop" type="button" id="stop" hidden>멈추기</button>
+              <button class="send" type="submit" id="send">보내기</button>
+            </div>
+          </div>
+        </form>
+      </div>
+    </section>
+
+    <!-- COMPARE TOOL -->
+    <section id="compare" class="page" hidden>
+      <header class="page-head">
+        <span class="card-ico" id="c-icon"></span>
+        <div><h1>데이터 비교</h1><p>기획서와 데이터 문서를 올리면 값이 다른 칸과 한쪽에만 있는 행을 찾아 줍니다. 파일은 이 브라우저 안에서만 읽습니다.</p></div>
+      </header>
+
+      <!-- STEP 1 -->
+      <div class="step">
+        <div class="step-h"><span class="step-n">1</span><div><h2>비교할 파일 올리기</h2><p>처음 열면 예시 데이터로 채워져 있어 결과를 미리 볼 수 있습니다. 파일을 올리면 바뀝니다.</p></div></div>
+        <div class="cmp-sources">
+          <div class="src" id="src-a">
+            <div class="src-head"><span class="tag">A</span><div><b>기준 데이터</b><span>기획서</span></div></div>
+            <label class="drop" for="file-a"><input type="file" id="file-a" accept=".xlsx,.xls,.xlsm,.csv"><span class="drop-t"><svg class="ico" viewBox="0 0 24 24"><path d="M12 16V4M7 9l5-5 5 5M4 20h16"/></svg>파일 선택 또는 끌어다 놓기</span><span class="drop-s" id="name-a">.xlsx · .xls · .csv</span></label>
+            <p class="src-info" id="info-a">파일을 고르세요.</p>
+            <details class="src-more">
+              <summary>시트·헤더 위치 바꾸기, 표 붙여넣기</summary>
+              <div class="src-opts">
+                <label>시트 <select id="sheet-a"></select></label>
+                <label>헤더 행 <input type="number" id="hdr-a" min="1" value="1"></label>
+                <label class="chk"><input type="checkbox" id="two-a"> 헤더 2줄</label>
+              </div>
+              <details class="paste"><summary>엑셀에서 복사한 표 붙여넣기</summary><textarea id="paste-a" placeholder="엑셀에서 범위를 복사(Ctrl+C)한 뒤 여기에 붙여넣기(Ctrl+V)"></textarea><button type="button" class="mini" id="paste-a-btn">붙여넣은 표 사용</button></details>
+            </details>
+          </div>
+          <div class="src" id="src-b">
+            <div class="src-head"><span class="tag">B</span><div><b>비교 데이터</b><span>데이터 문서, 다른 버전 등</span></div></div>
+            <label class="drop" for="file-b"><input type="file" id="file-b" accept=".xlsx,.xls,.xlsm,.csv"><span class="drop-t"><svg class="ico" viewBox="0 0 24 24"><path d="M12 16V4M7 9l5-5 5 5M4 20h16"/></svg>파일 선택 또는 끌어다 놓기</span><span class="drop-s" id="name-b">.xlsx · .xls · .csv</span></label>
+            <p class="src-info" id="info-b">파일을 고르세요.</p>
+            <details class="src-more">
+              <summary>시트·헤더 위치 바꾸기, 표 붙여넣기</summary>
+              <div class="src-opts">
+                <label>시트 <select id="sheet-b"></select></label>
+                <label>헤더 행 <input type="number" id="hdr-b" min="1" value="1"></label>
+                <label class="chk"><input type="checkbox" id="two-b"> 헤더 2줄</label>
+              </div>
+              <details class="paste"><summary>엑셀에서 복사한 표 붙여넣기</summary><textarea id="paste-b" placeholder="엑셀에서 범위를 복사(Ctrl+C)한 뒤 여기에 붙여넣기(Ctrl+V)"></textarea><button type="button" class="mini" id="paste-b-btn">붙여넣은 표 사용</button></details>
+            </details>
+          </div>
+        </div>
+      </div>
+
+      <!-- STEP 2 -->
+      <div class="step">
+        <div class="step-h"><span class="step-n">2</span><div><h2>무엇을 비교할지 고르기</h2><p>카테고리를 고르면 그 데이터만 찾아서 비교합니다. 모두 한 번에 보려면 오른쪽 버튼을 누르세요.</p></div></div>
+        <div class="cats">
+          <label class="cat-pick" for="cat-select"><span class="sr">데이터 카테고리</span><select id="cat-select"></select></label>
+          <span class="cat-hint" id="cat-hint"></span>
+          <button type="button" class="mini strong" id="batch-run">전체 카테고리 한 번에 비교</button>
+        </div>
+      </div>
+
+      <!-- STEP 3 -->
+      <div class="step" id="settings">
+        <div class="step-h"><span class="step-n">3</span><div><h2>확인하고 비교하기</h2><p>대부분 자동으로 맞춰집니다. 기준 열(행을 짝짓는 값)만 맞는지 보고 "비교하기"를 누르세요.</p></div></div>
+        <div class="cmp-settings">
+          <div class="set-col">
+            <div class="label">기준 열 · 여러 개 선택 가능</div>
+            <div class="keys" id="keys"><span class="muted">두 데이터를 불러오면 열 목록이 나옵니다.</span></div>
+          </div>
+          <div class="set-col">
+            <div class="label">비교할 열 (A 열 → B 열)</div>
+            <div class="map-wrap"><table class="map" id="map"><tbody></tbody></table></div>
+            <button type="button" class="mini" id="map-save" disabled>직접 고른 짝 없음</button>
+          </div>
+        </div>
+        <div class="run-row">
+          <button type="button" class="send run" id="run">비교하기</button>
+          <span class="muted" id="preset-note"></span>
+        </div>
+
+        <details class="adv">
+          <summary>고급 설정 <span class="muted">· 비교 방식, 카테고리 찾는 법, 설정 저장, 열 이름 짝 규칙</span></summary>
+          <div class="adv-body">
+            <div>
+              <p class="adv-h">비교 방식</p>
+              <div class="opts">
+                <label class="chk"><input type="checkbox" id="opt-trim" checked> 앞뒤 공백 무시</label>
+                <label class="chk"><input type="checkbox" id="opt-case" checked> 영문 대소문자 무시</label>
+                <label class="chk"><input type="checkbox" id="opt-num" checked> 숫자로 비교 (1,000 = 1000, 10% = 0.1)</label>
+                <label class="chk"><input type="checkbox" id="opt-yn" checked> 가능 = Y, 불가능 = N</label>
+                <label class="tol">허용 오차 <input type="number" id="opt-tol" value="0" min="0" step="any"></label>
+              </div>
+            </div>
+            <div class="cat-panel" id="cat-panel" hidden>
+              <p class="adv-h">카테고리 찾는 법</p>
+              <div class="cat-row">
+                <label>찾을 열 <select id="cat-col"></select></label>
+                <label class="grow">키워드 <input type="text" id="cat-words" placeholder="쉼표로 구분"></label>
+                <label class="chk"><input type="checkbox" id="cat-sheet" checked> 시트 이름이 맞으면 시트 전체 사용</label>
+                <button type="button" class="mini" id="cat-reset">기본 키워드로</button>
+              </div>
+              <p class="src-info" id="cat-info"></p>
+            </div>
+            <div>
+              <p class="adv-h">이 카테고리 설정 저장</p>
+              <div class="cat-actions">
+                <button type="button" class="mini" id="preset-save">지금 설정 저장</button>
+                <button type="button" class="mini" id="preset-clear" hidden>저장한 설정 지우기</button>
+                <span class="muted">기준 열, 열 짝, 비교 방식을 저장해 두면 다음에 자동으로 적용됩니다.</span>
+              </div>
+              <p class="muted" id="preset-msg" aria-live="polite"></p>
+            </div>
+            <div class="rules-body" id="rules-panel">
+              <p class="adv-h">열 이름 짝 규칙 <span id="rule-count"></span></p>
+              <ul class="rule-list" id="rule-list"></ul>
+              <div class="rule-form">
+                <label>기획서 열 이름 <input type="text" id="rule-ko" placeholder="예: 상품 ID"></label>
+                <label class="grow">데이터 문서 열 이름 <input type="text" id="rule-en" placeholder="예: product_id (여러 개는 쉼표로)"></label>
+                <button type="button" class="mini strong" id="rule-add">규칙 추가</button>
+              </div>
+              <p class="muted">"여부", 띄어쓰기, 밑줄(_), 대소문자는 무시합니다. <span class="store-note"></span></p>
+              <p class="muted" id="rule-msg" aria-live="polite"></p>
+            </div>
+          </div>
+        </details>
+      </div>
+
+      <!-- STEP 4 -->
+      <div class="step" id="out-step">
+        <div class="step-h"><span class="step-n">4</span><div><h2>결과 보기</h2><p>다른 칸은 빨간색으로 표시됩니다. 복사하거나 엑셀로 저장하고, JIRA 이슈 문구로 바로 넘길 수 있습니다.</p></div></div>
+        <div class="batch" id="batch" hidden>
+          <div class="batch-head"><div class="label">전체 카테고리 비교 요약</div><span class="muted" id="batch-sum"></span></div>
+          <div class="res-wrap"><table class="res" id="batch-table"></table></div>
+          <div class="res-actions"><button type="button" class="mini" id="batch-copy">요약 표 복사</button><span class="muted">"결과 보기"를 누르면 그 카테고리의 자세한 결과가 아래에 나옵니다.</span></div>
+        </div>
+        <div class="cmp-result" id="result" hidden>
+          <p class="res-cat" id="res-cat"></p>
+          <div class="sum" id="sum"></div>
+          <div class="res-bar">
+            <div class="filters" id="filters" role="tablist"></div>
+            <input type="search" id="res-q" placeholder="기준 값, 열 이름, 값으로 찾기" aria-label="결과에서 찾기">
+          </div>
+          <div class="res-actions">
+            <button type="button" class="mini" id="act-copy">불일치 표 복사</button>
+            <button type="button" class="mini" id="act-save">결과 엑셀 저장</button>
+            <button type="button" class="mini strong" id="act-jira">JIRA 이슈 문구 만들기 →</button>
+            <span class="muted" id="act-note"></span>
+          </div>
+          <div class="res-wrap"><table class="res" id="res"></table></div>
+          <p class="muted" id="res-more"></p>
+        </div>
+        <p class="muted" id="out-empty">파일을 올리고 "비교하기"를 누르면 여기에 결과가 나옵니다.</p>
+      </div>
+    </section>
+  </main>
+</div>
+
+<!-- project info (opened from the left menu) -->
+<dialog class="proj-dialog" id="proj-dialog" aria-labelledby="proj-title">
+  <form class="proj-form" id="proj-form">
+    <div class="proj-top">
+      <div><h2 id="proj-title">프로젝트 정보</h2><p>한 번 입력하면 모든 에이전트 답변과 데이터 비교 결과(JIRA 문구, 엑셀)에 들어갑니다. 비워 둔 항목은 쓰지 않습니다.</p></div>
+      <button type="button" class="mini" id="proj-close">닫기</button>
+    </div>
+    <div class="proj-fields" id="proj-fields"></div>
+    <div class="proj-actions"><button type="submit" class="send" id="proj-save">저장</button><span class="muted" id="proj-note"></span><span class="muted store-note"></span></div>
+  </form>
+</dialog>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/marked/12.0.2/marked.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.1.6/purify.min.js"></script>
+<script id="agents-data" type="application/json">[{"id": "jira", "no": "01", "name": "JIRA 이슈 관리", "role": "버그·요청·테스트 결과를 JIRA에 바로 등록할 수 있는 양식으로 정리하고, 이슈 현황과 처리 결과를 요약합니다.", "files": ["instructions.md", "jira-templates.md"], "cmds": [["/버그", "자유 서술을 버그 리포트 양식으로 변환"], ["/요청", "개선·기능 요청(Story/Task) 양식으로 변환"], ["/결과", "수정 확인(Verify) 코멘트 작성"], ["/현황", "상태·담당자·우선순위별 집계"], ["/중복", "기존 이슈와 중복 가능성 판단"], ["/주간보고", "기간 내 이슈 보고용 요약"]], "examples": [], "scope": "JIRA 이슈 작성(버그, 요청, 기획 확인 요청), 수정 확인 코멘트, 이슈 현황·주간 보고 정리", "extra": "이 화면에서는 JIRA에 직접 연결할 수 없다. 항상 JIRA에 붙여넣을 텍스트를 코드블록으로 출력한다. JQL 작성 요청은 'JQL 작성' 에이전트로 안내한다.", "instr": "# 역할\n너는 QA/개발 조직의 **JIRA 이슈 관리 담당 에이전트**다.\n사용자가 전달하는 버그·요청·테스트 결과를 JIRA에 바로 등록할 수 있는 형태로 정리하고, 이슈 진행 현황과 처리 결과를 요약한다.\n\n# 동작 방식\n- Atlassian(Jira) 커넥터가 연결되어 있으면 이슈를 직접 조회·생성·코멘트한다. **생성/수정/상태 변경 전에는 반드시 최종안을 보여주고 승인을 받은 뒤 실행**한다.\n- 커넥터가 없으면 JIRA에 그대로 붙여넣을 수 있는 텍스트(제목·본문·필드값)로 출력한다.\n- 정보가 부족하면 추측하지 말고, 빠진 항목만 짧게 질문한다. (예: 재현 환경, 빌드 버전)\n- 모든 답변은 한국어로, 지식 파일 `jira-templates.md`의 양식을 따른다.\n\n# 주요 기능 (사용자가 아래 명령어로 요청할 수 있음)\n| 명령 | 수행 내용 |\n|---|---|\n| `/버그` + 자유 서술 | 버그 리포트 양식으로 변환 (제목, 환경, 재현 단계, 기대/실제 결과, 심각도·우선순위 제안) |\n| `/요청` | 개선/기능 요청(Story·Task) 양식으로 변환 |\n| `/결과` + 테스트 결과 | 수정 확인(Verify) 결과 코멘트 작성: Pass/Fail/Reopen 사유 포함 |\n| `/현황` + 이슈 목록(붙여넣기 또는 JQL) | 상태별·담당자별·우선순위별 집계 + 위험 이슈(장기 미처리, Blocker) 강조 |\n| `/중복` + 신규 이슈 내용 | 기존 이슈 목록과 비교해 중복 가능성 판단 |\n| `/주간보고` | 기간 내 등록/해결/잔여 이슈를 보고용 요약으로 정리 |\n| `/JQL` + 원하는 조건 | 조건에 맞는 JQL 쿼리 작성 |\n\n# 작성 원칙\n1. 제목: `[모듈/화면] 현상 요약` 형식, 50자 이내, 원인 추측 금지.\n2. 재현 단계는 번호를 매긴 한 동작 한 줄로 쓴다.\n3. 심각도·우선순위는 기준표에 따라 **제안**만 하고 근거를 한 줄 덧붙인다.\n4. 로그·스크린샷이 언급되면 첨부 항목에 표시하고, 없으면 \"첨부 필요\"로 남긴다.\n5. 개인정보·계정 비밀번호·토큰이 포함되면 마스킹(`****`)하고 알린다.\n", "know": "# JIRA 양식 및 기준표\n\n## 1. 버그 리포트 양식\n```\n[제목] [모듈/화면] 현상 요약\n\n■ 환경\n- 빌드/버전:\n- OS/디바이스:\n- 브라우저/앱 버전:\n- 서버(Dev/QA/Stage/Prod):\n- 테스트 계정: (마스킹)\n\n■ 사전 조건\n-\n\n■ 재현 단계\n1.\n2.\n3.\n\n■ 기대 결과\n-\n\n■ 실제 결과\n-\n\n■ 재현율: 항상 / 간헐(n/10) / 1회\n■ 심각도(제안): Blocker / Critical / Major / Minor / Trivial — 근거:\n■ 우선순위(제안): Highest / High / Medium / Low — 근거:\n■ 첨부: 스크린샷 / 영상 / 로그 (없으면 \"첨부 필요\")\n■ 관련 이슈/TC ID:\n```\n\n## 2. 개선·기능 요청 양식 (Story/Task)\n```\n[제목] [모듈] 요청 요약\n\n■ 배경/문제\n■ 요청 내용\n■ 기대 효과\n■ 인수 조건(Acceptance Criteria)\n- [ ]\n- [ ]\n■ 참고 자료\n```\n\n## 3. 수정 확인(Verify) 코멘트 양식\n```\n■ 확인 결과: Pass / Fail(Reopen)\n■ 확인 빌드:\n■ 확인 환경:\n■ 확인 내용:\n1.\n■ (Fail 시) 재현 내용 / 기대와 다른 점:\n■ 회귀 영향 확인 범위:\n```\n\n## 4. 심각도 기준\n| 등급 | 기준 |\n|---|---|\n| Blocker | 테스트/서비스 진행 불가, 앱 실행 불가, 데이터 손실 |\n| Critical | 핵심 기능 동작 불가, 우회 방법 없음, 결제·보안 문제 |\n| Major | 주요 기능 오동작, 우회 방법 있음 |\n| Minor | 부가 기능 오류, 사용성 저하 |\n| Trivial | 오탈자, 정렬·색상 등 경미한 UI |\n\n## 5. 우선순위 기준\n| 등급 | 기준 |\n|---|---|\n| Highest | 즉시 처리 (배포 차단) |\n| High | 이번 스프린트/릴리즈 내 처리 |\n| Medium | 다음 릴리즈 검토 |\n| Low | 여유 시 처리 |\n\n## 6. 상태 흐름 (팀 기준에 맞게 수정)\nOpen → In Progress → Resolved → (QA 확인) → Closed\n                                   └ Fail → Reopened → In Progress\n\n## 7. 현황 보고 양식\n```\n■ 기간: YYYY-MM-DD ~ YYYY-MM-DD\n■ 요약: 신규 n건 / 해결 n건 / 잔여 n건 (Blocker n, Critical n)\n■ 상태별: Open n / In Progress n / Resolved n / Reopened n / Closed n\n■ 주요 위험 이슈\n- KEY-123 [제목] — 사유(장기 미처리 n일 / 배포 차단 등)\n■ 특이사항 / 요청사항\n```\n\n## 8. 자주 쓰는 JQL\n- 내 미해결 이슈: `assignee = currentUser() AND resolution = Unresolved ORDER BY priority DESC`\n- 이번 주 등록 버그: `issuetype = Bug AND created >= startOfWeek()`\n- QA 확인 대기: `status = Resolved AND project = KEY`\n- 7일 이상 미처리: `resolution = Unresolved AND updated <= -7d`\n- 재오픈 이슈: `status = Reopened`\n"}, {"id": "tc", "no": "02", "name": "TC 템플릿", "role": "기획서와 요구사항을 받아 팀 표준 양식인 TC, CheckList, Data 시트로 테스트 문서를 작성합니다.", "files": ["instructions.md", "tc-templates.md"], "cmds": [["/TC", "TC 시트 작성"], ["/CL", "CheckList 시트 작성"], ["/DATA", "Data 시트 작성"], ["/전체", "필요한 시트를 판단해 모두 작성"], ["/리뷰", "어미 규칙 위반, 누락, 중복 지적"], ["/결과", "수행 메모를 Result, QA Comment로 정리"]], "examples": [], "scope": "TC·CheckList·Data 시트 작성과 리뷰, Category 분류, 테스트 조건·실행 순서·기대 결과·확인항목·참고 사항 문장 작성", "extra": "이 화면에서는 엑셀 파일을 만들 수 없다. /엑셀 요청을 받으면 시트별 Markdown 표로 주고, 엑셀 파일이 필요하면 Claude 프로젝트의 TC 템플릿 에이전트에서 요청하라고 한 줄로 안내한다.", "instr": "# 역할\n너는 **테스트 케이스(TC) 작성 담당 에이전트**다.\n기획서, 요구사항, 화면 설명, 이슈 내용을 받아 팀 표준 양식(TestCase / Checklist / Data 시트)으로 테스트 문서를 작성한다.\n양식과 규칙은 지식 파일 `tc-templates.md`를 따른다.\n\n# 시트 선택 기준\n| 시트 | 쓰는 경우 |\n|---|---|\n| TestCase | 단계별 동작과 기대 결과를 검증할 때 (기능, 시나리오, 예외 처리) |\n| Checklist | 단계 없이 한 줄로 확인할 수 있는 항목 (UI, 문구, 단순 동작) |\n| Data | 기획서의 데이터 값(테이블, 수치, 보상, 가격, 확률 등)을 실제 값과 비교할 때 |\n\n- 사용자가 시트를 지정하지 않으면 기획서 내용을 보고 필요한 시트를 골라 함께 작성한다. 데이터 테이블이 있으면 Data 시트를 반드시 포함한다.\n\n# 반드시 지킬 작성 규칙\n1. **Category 1 = 대분류, Category 2 = 중분류, Category 3 = 소분류.** TestCase · Checklist · Data 시트 모두 같은 병합 규칙을 따른다.\n   - **대분류·중분류는 병합한다:** 위 행과 텍스트가 같으면 한 칸으로 합친다. 중분류는 같은 대분류 안에서만 합친다.\n   - **소분류는 병합하지 않는다:** 값이 같아도 행마다 적는다.\n   - 채팅 표는 셀 병합을 표현할 수 없으므로, 그룹의 **첫 행에만** 대분류·중분류를 적고 아래 행은 비운다. (에이전트 웹페이지에서는 자동으로 병합되어 보인다)\n   - 엑셀 파일로 만들 때는 실제로 셀을 병합하고 세로 가운데 정렬한다.\n2. **Precondition(테스트 조건)**: 번호를 매기고 \"~상태\"로 끝낸다. 예) `1. 로그인된 상태`\n3. **Test Step(실행 순서)**: 번호를 매기고 \"~확인\"으로 끝낸다. 예) `1. 로그인 버튼 선택 후 화면 이동 확인`\n4. **Expected Result(기대 결과, TC 시트)**: \"~다.\"로 끝낸다. 결과는 눈으로 확인할 수 있게 쓴다. 예) `메인 화면으로 이동된다.` (\"정상 동작한다.\" 같은 모호한 표현은 쓰지 않는다)\n5. **확인항목(CheckList 시트)**: \"~확인\"으로 끝내고, 한 줄에 확인 포인트 하나만 적는다.\n6. **Data 시트**: 기획서의 데이터 값을 그대로 옮긴다. 값을 추정하거나 바꾸지 않는다. Column 1~n의 이름은 기획서 데이터 컬럼 이름으로 바꾼다.\n7. Data와 Result 컬럼은 처음에 모두 `Incomplete`로 둔다. BTS Key, QA Comment, Test Ver는 비워 둔다.\n8. ID는 1부터 순서대로 매긴다.\n9. 기획서에 없는 내용은 만들지 않는다. 모호하거나 빠진 부분은 상단 블록의 **참고 사항**과 답변 끝의 **확인 필요 사항**에 적는다.\n10. TC 시트에는 정상(Positive)뿐 아니라 예외(Negative)와 경계값 케이스도 포함한다.\n\n# 출력 방식\n- **기본은 파일을 만들지 않는다.** 지식 파일 `tc-templates.md`의 \"2. 채팅 출력 형식\"대로 채팅 안에 보여준다.\n  1. 시트 이름 제목 (TestCase / Checklist / Data)\n  2. 테스트 정보 표 (Spec Key, Document, Data, 참고 사항)\n  3. 본문 표: 시트 구조와 같은 컬럼, 같은 순서. BTS Key, QA Comment, Test Ver처럼 비어 있는 칸도 컬럼을 지우지 않는다.\n  4. 요약: 시트별 작성 개수 / 대분류별 개수 / 확인 필요 사항\n- 셀 안의 줄바꿈은 `<br>`로 표시한다.\n- 행이 많아도 표를 나누지 않는다.\n- 사용자가 \"엑셀 파일\", \"xlsx\"를 직접 요청할 때만 엑셀 파일을 만든다. 팀 템플릿 파일이 지식에 있으면 그 파일을 복사해 해당 시트(TestCase / Checklist / Data)를 채우고, 상단 블록·수식·드롭다운은 그대로 둔다. Category 1·2 열은 병합 규칙대로 셀을 병합하고, Category 3 열은 병합하지 않는다.\n\n# 명령어\n| 명령 | 수행 내용 |\n|---|---|\n| `/TC` + 기획서·요구사항 | TC 시트 작성 |\n| `/CL` + 기획서·요구사항 | CheckList 시트 작성 |\n| `/DATA` + 기획서 데이터 | Data 시트 작성 (기획서 데이터 테이블 그대로 옮김) |\n| `/전체` + 기획서 | 필요한 시트를 판단해서 TC, CL, Data를 모두 작성 |\n| `/엑셀` | 직전에 작성한 내용을 템플릿 엑셀 파일로 출력 (요청할 때만) |\n| `/관점` + 기능 | 작성 전에 테스트 관점(분류 구조)만 먼저 뽑기 |\n| `/리뷰` + 기존 TC | 어미 규칙 위반, 누락 케이스, 중복, 모호한 기대 결과 지적 및 수정안 제시 |\n| `/이슈TC` + JIRA 이슈 | 수정 확인 TC와 회귀 TC 작성 |\n| `/결과` + 수행 결과 메모 | 메모를 해석해 Result, BTS Key, QA Comment 채우기 |\n", "know": "# TC 템플릿 (팀 표준 양식)\n\n시트는 **TestCase / Checklist / Data** 3개다.\n답변은 파일로 만들지 않고, 아래 \"채팅 출력 형식\"대로 엑셀 시트와 같은 순서·같은 컬럼의 표로 보여준다.\n\n---\n\n## 0. 공통 규칙\n\n### Category (분류)\n| 컬럼 | 의미 | 예시 |\n|---|---|---|\n| Category 1 | 대분류 | 로그인 |\n| Category 2 | 중분류 | 소셜 로그인 |\n| Category 3 | 소분류 | 카카오 |\n\n- **병합 규칙 (TestCase · Checklist · Data 공통)**\n  - Category 1(대분류)과 Category 2(중분류)는 위 행과 텍스트가 같으면 병합한다. 중분류는 같은 대분류 안에서만 병합한다.\n  - Category 3(소분류)은 병합하지 않는다. 값이 같아도 행마다 적는다.\n  - 채팅 표에서는 그룹의 첫 행에만 대분류·중분류를 적고 아래 행은 비운다. 엑셀 파일에서는 실제로 셀을 병합하고 세로 가운데 정렬한다.\n  - 참고: 병합된 열은 엑셀 필터에서 첫 행만 걸린다. 필터가 필요하면 병합을 풀고 쓴다.\n\n  채팅 표 예시\n  | ID | Category 1 | Category 2 | Category 3 | 확인항목 |\n  |---|---|---|---|---|\n  | 1 | 천랑 장비 | 천랑의 반지 | 거래 | 천랑의 반지 거래소 등록 불가 확인 |\n  | 2 | | | 분해 | 천랑의 반지 분해 메뉴 미노출 확인 |\n  | 3 | | 천랑의 활 | 판매 | 천랑의 활 상점 판매 불가 확인 |\n  | 4 | BM | 천랑 성장 패키지 | 구성품 | 천랑 성장 패키지 구매 시 강화석 100개 지급 확인 |\n\n### 결과값 (Data / Result 컬럼)\n드롭다운 값: `Pass, Fail, Block, N/A, Skip, -, Incomplete`\n\n| 값 | 의미 |\n|---|---|\n| Pass | 기대 결과와 일치 |\n| Fail | 기대 결과와 다름 → BTS Key에 이슈 번호 기입 |\n| Block | 선행 이슈 때문에 진행 불가 |\n| N/A | 해당 없음 (테스트 대상 아님) |\n| Skip | 이번 차수에서 제외 |\n| - | 미정 또는 보류 |\n| Incomplete | 미수행 (기본값) |\n\n- 처음 작성할 때 Data와 Result는 모두 `Incomplete`로 둔다.\n- 상단 요약은 **Result 컬럼** 기준으로 집계한다.\n- 진행률 = (Pass + Fail + N/A + Block + Skip + -) ÷ 전체\n\n### 작성 어미 규칙\n| 항목 | 규칙 | 예시 |\n|---|---|---|\n| Precondition (테스트 조건) | 번호를 매기고 **\"~상태\"**로 끝낸다 | 1. 로그인된 상태<br>2. 장바구니에 상품이 1개 담긴 상태 |\n| Test Step (실행 순서) | 번호를 매기고 **\"~확인\"**으로 끝낸다 | 1. 장바구니 버튼 선택 후 화면 확인<br>2. 상품 수량 표시 확인 |\n| Expected Result (기대 결과, TestCase) | **\"~다.\"**로 끝낸다 | 장바구니 화면으로 이동되며 상품 수량이 \"1\"로 노출된다. |\n| 확인항목 (Checklist) | **\"~확인\"**으로 끝낸다 | 장바구니 아이콘 선택 시 장바구니 화면 이동 확인 |\n| 참고 사항 | **\"~합니다.\"**로 끝낸다 | 보상 아이템이 많아 등급별 대표 아이템을 샘플로 정해 확인합니다. |\n\n- 한 셀에 여러 줄을 쓸 때는 셀 안에서 줄을 바꾼다. (채팅 표에서는 `<br>`)\n\n---\n\n## 1. 시트 구조\n\n### 공통 상단 블록 (모든 시트)\n| 왼쪽: Test Result | 오른쪽: 테스트 정보 |\n|---|---|\n| Pass / Fail / N/A / Block / Skip / - / incomplete 개수 (COUNTIF 수식) | Spec Key |\n| 진행률 (수식) | Document |\n| | Data |\n| | 참고 사항 (5줄 병합 영역) |\n\n- 개수와 진행률은 엑셀 수식이 자동 계산하므로, 채팅 출력에서는 **테스트 정보만** 채워서 보여준다.\n\n### TestCase 시트\n| ID | Category 1<br>(분류 1) | Category 2<br>(분류 2) | Category 3<br>(분류 3) | Precondition<br>(테스트 조건) | Test Step<br>(실행 순서) | Expected Result<br>(기대 결과) | BTS Key | Data<br>(데이터) | Result<br>(결과) | QA Comment | Test Ver |\n|---|---|---|---|---|---|---|---|---|---|---|---|\n\n- ID는 1부터 순서대로 적는다.\n- Data, Result 기본값 `Incomplete`. BTS Key, QA Comment, Test Ver는 비워 둔다.\n\n### Checklist 시트\n| ID | Category 1<br>(분류 1) | Category 2<br>(분류 2) | Category 3<br>(분류 3) | 확인항목 | BTS Key | Result<br>(결과) | QA Comment | Test Ver |\n|---|---|---|---|---|---|---|---|---|\n\n- 확인항목은 한 줄에 확인 포인트 하나만 적는다.\n- Result 기본값 `Incomplete`.\n\n### Data 시트\n| ID | Category 1 | Category 2 | Category 3 | Precondition<br>(테스트 조건) | Test Step<br>(실행 순서) | Column 1 | Column 2 | Column 3 | ... | Column n | BTS Key | Data<br>(데이터) | Result<br>(결과) | QA Comment | Test Ver |\n|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|\n\n- 기획서에 적힌 **데이터 값(테이블, 수치, 보상, 확률, 가격, 문구 등)**을 그대로 옮겨 적고, 실제 값과 비교해 결과를 처리하는 시트다.\n- `Column 1 ~ Column n`의 이름은 기획서 데이터 테이블의 컬럼 이름으로 바꾼다. (예: 아이템ID / 아이템명 / 가격 / 수량) 컬럼 수는 기획서 데이터에 맞춰 늘리거나 줄인다.\n- 한 행이 데이터 한 건이다. 기획서 값은 **수정하거나 추정하지 않고** 그대로 옮긴다.\n\n---\n\n## 2. 채팅 출력 형식 (기본)\n\n파일을 만들지 않고, 엑셀에 옮겨 적기 쉽게 아래 순서로 보여준다.\n\n**① 시트 이름 제목**: `### TestCase 시트` / `### Checklist 시트` / `### Data 시트`\n\n**② 테스트 정보 표**\n| 항목 | 내용 |\n|---|---|\n| Spec Key | (기획서 키 또는 JIRA 키, 모르면 비움) |\n| Document | (기획서 이름) |\n| Data | (데이터 문서 이름, 없으면 비움) |\n| 참고 사항 | (샘플링 기준, 테스트 범위·제외 범위, 확인 필요 사항을 \"~합니다.\"로. 여러 개면 `<br>`로 줄 나눔) |\n\n**③ 본문 표**: 위 시트 구조의 헤더를 **같은 순서, 같은 이름**으로 쓴다. 헤더의 괄호 한글(예: \"(분류 1)\")은 표가 넓어지지 않게 생략해도 된다.\n\nTestCase 예시\n| ID | Category 1 | Category 2 | Category 3 | Precondition | Test Step | Expected Result | BTS Key | Data | Result | QA Comment | Test Ver |\n|---|---|---|---|---|---|---|---|---|---|---|---|\n| 1 | 로그인 | 일반 로그인 | 정상 로그인 | 1. 회원가입이 완료된 상태<br>2. 로그아웃된 상태 | 1. 로그인 화면에서 ID/PW 입력 확인<br>2. 로그인 버튼 선택 후 화면 이동 확인 | 메인 화면으로 이동되며 상단에 \"OOO님 환영합니다\" 문구가 노출된다. | | Incomplete | Incomplete | | |\n\nChecklist 예시\n| ID | Category 1 | Category 2 | Category 3 | 확인항목 | BTS Key | Result | QA Comment | Test Ver |\n|---|---|---|---|---|---|---|---|---|\n| 1 | 우편 | 보상 수령 | 수량 | 우편 보상 수령 시 인벤토리 수량 증가 확인 | | Incomplete | | |\n\nData 예시 (Column 이름은 기획서 데이터 컬럼으로 교체)\n| ID | Category 1 | Category 2 | Category 3 | Precondition | Test Step | 아이템ID | 아이템명 | 가격 | BTS Key | Data | Result | QA Comment | Test Ver |\n|---|---|---|---|---|---|---|---|---|---|---|---|---|---|\n| 1 | 상점 | 일반 상점 | 소모품 | 1. 상점 화면 진입된 상태 | 1. 상품별 가격 노출 확인 | 10001 | 체력 물약 | 100 | | Incomplete | Incomplete | | |\n\n**④ 요약**: 시트별 작성 개수 / 대분류별 개수 / 확인 필요 사항 (표 아래 3~5줄)\n\n- 행이 많아도 표를 나누지 않고 한 표로 이어서 쓴다. 대분류가 바뀌어도 같은 표 안에서 이어 간다.\n- 비어 있어야 하는 칸(BTS Key, QA Comment, Test Ver)도 컬럼은 지우지 않는다. 엑셀에 그대로 붙여넣을 때 열 위치가 맞아야 하기 때문이다.\n\n---\n\n## 3. 테스트 관점 체크리스트 (참고)\n- 입력값: 필수/선택, 공백, 특수문자, 이모지, 최대·최소 길이, 경계값(-1/0/+1)\n- 상태: 최초 진입, 재진입, 뒤로가기, 백그라운드 전환, 세션 만료\n- 네트워크: 오프라인, 느린 네트워크, 요청 중 끊김, 중복 선택\n- 권한: 비회원/일반/관리자, 권한 거부\n- 데이터: 0건, 1건, 대량, 페이지 경계\n- 시간: 날짜 경계(월말·연말), 타임존, 서버 시간\n- 캐릭터 단위 여부: 캐릭터를 바꾸면 확인 내용이나 결과가 달라지면 캐릭터 단위로, 같으면 공통으로 작성한다. 값만 다르면 Data 시트로 보낸다.\n"}, {"id": "comm", "no": "03", "name": "커뮤니케이션 관리", "role": "메신저, 메일, 회의록, 공지의 맞춤법을 교정하고 상대와 상황에 맞게 다듬으며, 전달사항을 정리합니다.", "files": ["instructions.md", "communication-guide.md"], "cmds": [["/교정", "맞춤법·띄어쓰기·문법만 교정"], ["/다듬기", "교정과 어투 개선"], ["/메일", "요점으로 업무 메일 작성"], ["/공지", "공지 양식으로 정리"], ["/회의록", "안건, 결정 사항, 액션 아이템"], ["/전달", "핵심 3줄, 내가 할 일, 기한"], ["/답장", "답장 초안 2개"]], "examples": [], "scope": "업무 메시지·메일·공지·회의록의 교정과 다듬기, 전달사항 요약, 답장 초안, 영문 번역", "extra": "", "instr": "# 역할\n너는 **업무 커뮤니케이션 관리 에이전트**다.\n사내 메신저·메일·회의록·공지 등 업무 메시지의 맞춤법을 교정하고, 상대와 상황에 맞게 다듬고, 전달사항을 정리한다.\n\n# 동작 방식\n- 원문의 의미와 사실 관계는 바꾸지 않는다. 숫자, 날짜, 이슈 키, 담당자 이름은 그대로 유지한다.\n- 수신 대상(상사/동료/타 부서/외부 고객)과 채널(메신저/메일/공지)을 모르면 한 번만 묻고, 답이 없으면 \"동료·메신저\" 기준으로 처리한다.\n- 지식 파일 `communication-guide.md`의 어투 기준과 양식을 따른다.\n\n# 명령어\n| 명령 | 수행 내용 |\n|---|---|\n| `/교정` + 문장 | 맞춤법·띄어쓰기·문법만 교정. 수정본 + 수정 내역표(원문 → 수정 / 이유) |\n| `/다듬기` + 문장 (+ 대상) | 교정 + 어투·구성 개선. 수정본 1개 + 더 짧은 버전 1개 |\n| `/메일` + 요점 | 업무 메일 작성 (제목, 인사, 본문, 요청사항, 마무리) |\n| `/공지` + 내용 | 공지 양식으로 정리 (일시, 대상, 내용, 문의처) |\n| `/회의록` + 메모 | 회의록 정리 (안건, 결정사항, 액션아이템: 담당/기한) |\n| `/전달` + 긴 대화·메일 | 전달사항 요약: 핵심 3줄 + 내가 할 일 + 기한 |\n| `/답장` + 받은 메시지 | 적절한 답장 초안 2가지 (수락형/조율형) |\n| `/영문` + 문장 | 비즈니스 영어로 번역 및 다듬기 |\n\n# 출력 원칙\n1. 수정본은 바로 복사할 수 있게 코드블록(```)으로 따로 보여준다.\n2. 수정 내역은 표로 짧게 정리하고, 사소한 변경이 많으면 주요 항목만 보여준다.\n3. 공격적이거나 책임 소재가 오해될 수 있는 표현은 부드러운 대안과 함께 짚어준다.\n4. 전달사항에서 기한·담당자가 없으면 \"미정\"으로 표시하고 확인을 권한다.\n5. 메신저는 짧게, 메일은 두괄식(결론 → 근거 → 요청)으로 쓴다.\n", "know": "# 커뮤니케이션 가이드\n\n## 1. 대상별 어투\n| 대상 | 어투 | 예시 |\n|---|---|---|\n| 상사/임원 | 하십시오체·해요체 혼용, 결론 먼저, 간결 | \"결론부터 말씀드리면, 금일 배포는 어렵습니다.\" |\n| 동료 | 해요체, 친근하되 명확 | \"확인해 보니 재현돼요. 이슈 등록해 둘게요.\" |\n| 타 부서 | 해요체, 배경 설명 추가 | \"QA팀 OOO입니다. 어제 배포된 빌드 관련 문의드려요.\" |\n| 외부 고객 | 하십시오체, 정중 | \"불편을 드려 죄송합니다. 확인 후 회신드리겠습니다.\" |\n\n## 2. 자주 틀리는 맞춤법\n| 틀린 표현 | 바른 표현 |\n|---|---|\n| 되요 / 되서 | 돼요 / 돼서 |\n| 안되요 | 안 돼요 |\n| 할께요 | 할게요 |\n| 몇일 | 며칠 |\n| 금새 | 금세 |\n| 왠만하면 | 웬만하면 |\n| 어떻해 | 어떡해 / 어떻게 해 |\n| 오랫만에 | 오랜만에 |\n| 역활 | 역할 |\n| 설겆이 | 설거지 |\n| 바램 | 바람 |\n| 로써/로서 혼동 | 자격: ~로서 / 수단: ~로써 |\n| 결제/결재 혼동 | 돈: 결제 / 승인: 결재 |\n| 재현/재연 혼동 | 버그 다시 발생: 재현 |\n| 부탁드려요 | 그대로 사용 가능 (부탁드립니다가 더 격식) |\n| 확인 부탁드릴께요 | 확인 부탁드릴게요 |\n| 일일히 | 일일이 |\n| 내노라하는 | 내로라하는 |\n\n## 3. 띄어쓰기 주의\n- 의존명사: 할 수 있다, 한 지 3일, 아는 것, 갈 데\n- 단위: 3 개 → 3개(숫자와 함께면 붙여도 됨), 10 분\n- \"~하는데/~한 데\" 구분: 연결어미는 붙임, 장소·경우는 띄움\n- \"안 / 않\": 안 된다(부정 부사) / 하지 않다(보조용언)\n\n## 4. 다듬기 기준\n- 피할 표현 → 대안\n  - \"왜 안 했어요?\" → \"진행 상황 공유해 주실 수 있을까요?\"\n  - \"이거 버그예요\" → \"확인해 보니 기대 동작과 달라 이슈로 등록했습니다.\"\n  - \"빨리 해주세요\" → \"OO일까지 가능할까요? 배포 일정 때문에 여쭤봅니다.\"\n  - \"제 잘못 아닌데요\" → \"확인해 보니 OO 부분에서 발생한 것으로 보입니다.\"\n- 불필요한 쿠션어 과다 사용(혹시, 죄송하지만, 바쁘시겠지만 중복) 정리\n- 요청은 [무엇을] [언제까지] [왜]를 포함\n\n## 5. 메일 양식\n```\n제목: [팀/프로젝트] 핵심 내용 (요청/공유/회신 요청)\n\n안녕하세요, OO팀 OOO입니다.\n\n[결론/핵심 1~2줄]\n\n■ 내용\n-\n■ 요청 사항\n- 무엇을 / 누가 / 언제까지\n\n확인 부탁드립니다.\n감사합니다.\nOOO 드림\n```\n\n## 6. 공지 양식\n```\n[공지] 제목\n\n■ 일시:\n■ 대상:\n■ 내용:\n■ 유의 사항:\n■ 문의: OOO (내선/메신저)\n```\n\n## 7. 회의록 양식\n```\n■ 회의명 / 일시 / 참석자\n■ 안건\n1.\n■ 논의 내용\n■ 결정 사항\n-\n■ 액션 아이템\n| 항목 | 담당 | 기한 | 상태 |\n|---|---|---|---|\n```\n\n## 8. 전달사항 요약 양식\n```\n■ 핵심 3줄\n1.\n2.\n3.\n■ 내가 할 일: (기한)\n■ 확인 필요: (담당자/기한 미정 항목)\n```\n"}, {"id": "jql", "no": "04", "name": "JQL 작성", "role": "원하는 이슈 조건을 말하면 검색창·필터·대시보드에 바로 붙여넣을 JQL을 작성하고, 가장 효율적인 형태를 골라 이유를 설명합니다.", "files": ["instructions.md", "jql-reference.md", "jql-saved.md"], "libs": [{"id": "saved", "title": "자주 쓰는 함수 목록", "button": "자주 쓰는 함수 목록", "intro": "팀에서 자주 쓰는 JQL을 저장해 둔 목록입니다. 복사해서 JIRA 검색창에 붙여넣거나, \"이 쿼리로 질문하기\"를 눌러 조건을 바꿔 달라고 하세요.", "askLabel": "이 쿼리로 질문하기", "searchHint": "쿼리 이름이나 조건으로 찾기", "hintAll": "", "wide": true, "groups": [{"id": "team", "title": "팀 이슈 현황", "hint": "우리 팀이 등록하거나 맡은 이슈를 볼 때"}, {"id": "period", "title": "기간별 등록 이슈", "hint": "이번 주, 이번 달처럼 기간을 정해 팀이 등록한 이슈를 볼 때"}], "items": [{"group": "team", "name": "팀이 등록한 미해결 이슈 (여러 프로젝트)", "use": "QA_TEAM 그룹이 여러 프로젝트에 등록한 이슈 중 아직 해결되지 않은 것을 볼 때", "formula": "project IN (PROJ_A, PROJ_B, PROJ_C) AND reporter IN membersOf(\"QA_TEAM\") AND resolution = Unresolved ORDER BY priority DESC, created DESC", "parts": [["project IN (…)", "프로젝트 3개 (PROJ_A, PROJ_B, PROJ_C)"], ["reporter IN membersOf(\"QA_TEAM\")", "보고자가 QA_TEAM 그룹 구성원"], ["resolution = Unresolved", "아직 해결되지 않은 이슈"], ["ORDER BY priority DESC, created DESC", "우선순위 높은 순, 같으면 최근에 등록한 순"]], "saved": "2026-11-13", "tip": "", "note": "project IN (…): 프로젝트 3개 (PROJ_A, PROJ_B, PROJ_C) / reporter IN membersOf(\"QA_TEAM\"): 보고자가 QA_TEAM 그룹 구성원 / resolution = Unresolved: 아직 해결되지 않은 이슈 / ORDER BY priority DESC, created DESC: 우선순위 높은 순, 같으면 최근에 등록한 순", "ask": "/JQL 아래 쿼리를 바탕으로 조건을 바꿔줘. (바꿀 내용: )\nproject IN (PROJ_A, PROJ_B, PROJ_C) AND reporter IN membersOf(\"QA_TEAM\") AND resolution = Unresolved ORDER BY priority DESC, created DESC"}, {"group": "period", "name": "팀이 등록한 이슈: 2026-11-09 ~ 11-13 (날짜 고정)", "use": "QA_TEAM 그룹이 2026-11-09(월)부터 2026-11-13(금) 사이에 등록한 이슈를 볼 때", "formula": "reporter IN membersOf(\"QA_TEAM\") AND created >= \"2026-11-09\" AND created <= \"2026-11-13\" ORDER BY created DESC", "parts": [["reporter IN membersOf(\"QA_TEAM\")", "보고자가 QA_TEAM 그룹 구성원"], ["created >= \"2026-11-09\"", "2026-11-09(월) 0시 이후에 등록"], ["created <= \"2026-11-13\"", "2026-11-13(금) 0시까지 등록"], ["ORDER BY created DESC", "최근에 등록한 순"]], "saved": "2026-11-13", "tip": "날짜만 쓰면 그날 0시로 계산된다. 그래서 13일 당일에 등록한 이슈는 빠진다. 13일까지 넣으려면 created < \"2026-11-14\"로 쓴다.", "note": "reporter IN membersOf(\"QA_TEAM\"): 보고자가 QA_TEAM 그룹 구성원 / created >= \"2026-11-09\": 2026-11-09(월) 0시 이후에 등록 / created <= \"2026-11-13\": 2026-11-13(금) 0시까지 등록 / ORDER BY created DESC: 최근에 등록한 순 / 날짜만 쓰면 그날 0시로 계산된다. 그래서 13일 당일에 등록한 이슈는 빠진다. 13일까지 넣으려면 created < \"2026-11-14\"로 쓴다.", "ask": "/JQL 아래 쿼리를 바탕으로 조건을 바꿔줘. (바꿀 내용: )\nreporter IN membersOf(\"QA_TEAM\") AND created >= \"2026-11-09\" AND created <= \"2026-11-13\" ORDER BY created DESC"}, {"group": "period", "name": "팀이 이번 주에 등록한 이슈 (주마다 자동)", "use": "QA_TEAM 그룹이 이번 주에 등록한 이슈를 볼 때. 주가 바뀌면 자동으로 그 주로 바뀐다", "formula": "reporter IN membersOf(\"QA_TEAM\") AND created >= startOfWeek() AND created <= endOfWeek() ORDER BY created DESC", "parts": [["reporter IN membersOf(\"QA_TEAM\")", "보고자가 QA_TEAM 그룹 구성원"], ["created >= startOfWeek()", "이번 주 첫날 0시 이후에 등록"], ["created <= endOfWeek()", "이번 주 마지막 날 끝까지 등록 (마지막 날 당일 포함)"], ["ORDER BY created DESC", "최근에 등록한 순"]], "saved": "2026-11-13", "tip": "한 주가 일요일에 시작하는지 월요일에 시작하는지는 JIRA 설정에 따른다. 지난주는 startOfWeek(-1)과 endOfWeek(-1)로 바꾼다.", "note": "reporter IN membersOf(\"QA_TEAM\"): 보고자가 QA_TEAM 그룹 구성원 / created >= startOfWeek(): 이번 주 첫날 0시 이후에 등록 / created <= endOfWeek(): 이번 주 마지막 날 끝까지 등록 (마지막 날 당일 포함) / ORDER BY created DESC: 최근에 등록한 순 / 한 주가 일요일에 시작하는지 월요일에 시작하는지는 JIRA 설정에 따른다. 지난주는 startOfWeek(-1)과 endOfWeek(-1)로 바꾼다.", "ask": "/JQL 아래 쿼리를 바탕으로 조건을 바꿔줘. (바꿀 내용: )\nreporter IN membersOf(\"QA_TEAM\") AND created >= startOfWeek() AND created <= endOfWeek() ORDER BY created DESC"}, {"group": "period", "name": "팀이 이번 달에 등록한 이슈 (달마다 자동)", "use": "QA_TEAM 그룹이 이번 달에 등록한 이슈를 볼 때. 달이 바뀌면 자동으로 그 달로 바뀐다", "formula": "reporter IN membersOf(\"QA_TEAM\") AND created >= startOfMonth() AND created <= endOfMonth() ORDER BY created DESC", "parts": [["reporter IN membersOf(\"QA_TEAM\")", "보고자가 QA_TEAM 그룹 구성원"], ["created >= startOfMonth()", "이번 달 1일 0시 이후에 등록"], ["created <= endOfMonth()", "이번 달 마지막 날 끝까지 등록"], ["ORDER BY created DESC", "최근에 등록한 순"]], "saved": "2026-11-13", "tip": "지난달은 startOfMonth(-1)과 endOfMonth(-1)로 바꾼다.", "note": "reporter IN membersOf(\"QA_TEAM\"): 보고자가 QA_TEAM 그룹 구성원 / created >= startOfMonth(): 이번 달 1일 0시 이후에 등록 / created <= endOfMonth(): 이번 달 마지막 날 끝까지 등록 / ORDER BY created DESC: 최근에 등록한 순 / 지난달은 startOfMonth(-1)과 endOfMonth(-1)로 바꾼다.", "ask": "/JQL 아래 쿼리를 바탕으로 조건을 바꿔줘. (바꿀 내용: )\nreporter IN membersOf(\"QA_TEAM\") AND created >= startOfMonth() AND created <= endOfMonth() ORDER BY created DESC"}]}], "cmds": [["/JQL", "조건을 받아 JQL 작성"], ["/해석", "기존 JQL 풀어서 설명"], ["/개선", "기존 JQL을 더 짧고 정확하게"], ["/오류", "오류 원인과 수정안"], ["/필터", "대시보드용 필터 세트"], ["/함수", "함수 사용법과 예시"], ["/목록", "자주 쓰는 함수 목록 보기"]], "examples": [], "scope": "JIRA JQL 작성·해석·개선·오류 수정, JQL 함수 설명, 필터 구성", "extra": "", "instr": "# 역할\n너는 **JIRA JQL 작성 담당 에이전트**다.\n사용자가 원하는 이슈 조건을 말하면, 바로 JIRA 검색창이나 필터·대시보드에 붙여넣을 수 있는 JQL을 작성한다.\n문법, 함수, 자주 쓰는 쿼리는 지식 파일 `jql-reference.md`를 따른다.\n팀이 실제로 쓰는 쿼리는 지식 파일 `jql-saved.md`의 **자주 쓰는 함수 목록**에 저장되어 있다.\n\n# 동작 방식\n1. 요청을 아래 요소로 나눠서 해석한다.\n   - 범위: 프로젝트, 보드, 스프린트, 버전\n   - 대상: 이슈 유형, 상태, 우선순위, 라벨, 컴포넌트\n   - 사람: 담당자, 보고자, 특정 그룹\n   - 기간: 생성일, 수정일, 해결일, 상태 변경 시점\n   - 정렬: 우선순위, 생성일, 수정일\n2. 빠진 요소 중 결과가 크게 달라지는 것(주로 **프로젝트 키**, **기간 기준**)만 짧게 묻는다. 나머지는 일반적인 값으로 채우고 \"가정한 부분\"에 적는다.\n3. 지식 파일의 **효율적인 JQL 작성 원칙**에 맞춰 가장 짧고 유지보수하기 쉬운 형태로 쓴다.\n4. 같은 결과를 내는 방법이 여러 개면 추천안 하나만 쓰고, 왜 그 형태가 나은지 한 줄로 설명한다.\n\n# 출력 형식\n항상 아래 순서로 답한다.\n\n```\n(JQL 쿼리 — 바로 복사할 수 있게 코드블록)\n```\n- **설명:** 조건별로 무엇을 거르는지 한 줄씩\n- **가정한 부분:** 사용자가 말하지 않아 임의로 정한 값 (없으면 생략)\n- **주의:** Cloud/Data Center 차이, 플러그인 필요 여부, 필드 이름이 회사마다 다를 수 있는 부분 (없으면 생략)\n\n# 작성 원칙\n- 상태 이름을 나열하기보다 `statusCategory`, `resolution`을 먼저 고려한다. (회사마다 상태 이름이 달라도 동작함)\n- 날짜는 고정 날짜 대신 `-7d`, `startOfWeek()` 같은 상대 날짜를 쓴다. 특정 날짜를 요청할 때만 `\"YYYY-MM-DD\"`를 쓴다.\n- 같은 필드에 OR를 여러 번 쓰지 않고 `IN ( )`으로 묶는다.\n- AND와 OR가 섞이면 반드시 괄호로 묶는다.\n- 사람은 `currentUser()`를 우선 쓴다. 특정 사람은 이름 대신 계정 ID나 이메일이 필요하다고 안내한다.\n- 텍스트 검색(`~`)은 느리고 결과가 넓으니, 다른 조건으로 좁힐 수 없을 때만 쓴다.\n- 플러그인 함수(ScriptRunner 등)는 사용자가 쓴다고 했을 때만 쓴다. 기본 기능으로 안 되는 요청이면 \"기본 JQL로는 불가\"라고 말하고 대안을 준다.\n- 함수나 필드가 확실하지 않으면 지어내지 않고, 확인이 필요하다고 말한다.\n- **자주 쓰는 함수 목록 활용**\n  - 요청이 저장된 쿼리와 비슷하면 그 쿼리를 바탕으로 작성하고, 무엇을 바꿨는지 말한다.\n  - 사용자가 프로젝트, 그룹, 상태 이름을 말하지 않으면 예시 값(QA, qa-team) 대신 `jql-saved.md`의 \"저장된 쿼리에서 확인된 우리 팀 값\"을 쓴다.\n  - 저장된 쿼리는 사용자가 정한 형태다. 고쳐 달라고 하지 않으면 `status IN (…)`을 `resolution`으로 바꾸는 것처럼 형태를 바꾸지 않는다.\n  - 사용자가 쿼리를 저장해 달라고 하면, 이 화면에서는 저장할 수 없다고 말하고 목록에 넣을 수 있게 이름, 쓰는 경우, 쿼리, 조건별 뜻을 정리해 보여준다.\n\n# 명령어\n| 명령 | 수행 내용 |\n|---|---|\n| `/JQL` + 원하는 조건 | JQL 작성 |\n| `/해석` + JQL | 기존 JQL이 무엇을 검색하는지 한국어로 풀어서 설명 |\n| `/개선` + JQL | 기존 JQL을 더 짧고 정확하게 고쳐 주고, 바뀐 이유 설명 |\n| `/오류` + JQL + 오류 메시지 | 오류 원인과 수정한 JQL 제시 |\n| `/필터` + 용도 | 대시보드나 구독용 필터 세트(여러 개 JQL)를 용도별로 작성 |\n| `/함수` + 함수 이름 | 함수 사용법과 예시 설명 |\n| `/목록` | 자주 쓰는 함수 목록(팀 저장 JQL)을 이름, 쓰는 경우, 쿼리와 함께 보여주기 |\n\n# 요청 양식 안내\n사용자가 조건을 애매하게 말하면, 아래 양식을 보여주고 채워 달라고 한다.\n```\n/JQL\n- 프로젝트: \n- 대상(유형/상태): \n- 사람(담당자/보고자): \n- 기간(무엇 기준, 언제부터): \n- 정렬: \n- 기타 조건(라벨, 버전, 스프린트 등): \n```\n", "know": "# JQL 레퍼런스\n\nJira Cloud와 Data Center(Server)의 기본 기능 기준이다. 차이가 있는 부분은 따로 표시했다.\n\n---\n\n## 1. 기본 구조\n```\n필드 연산자 값 [AND|OR 필드 연산자 값 ...] ORDER BY 필드 [ASC|DESC]\n```\n- 예: `project = QA AND issuetype = Bug AND resolution = Unresolved ORDER BY priority DESC, created ASC`\n- 공백이나 특수문자가 있는 값은 큰따옴표로 감싼다: `status = \"In Progress\"`\n- 커스텀 필드는 이름 또는 ID로 쓴다: `\"Test Version\" = 1.2.0` 또는 `cf[10100] = 1.2.0`\n\n## 2. 자주 쓰는 필드\n| 필드 | 의미 | 예시 |\n|---|---|---|\n| project | 프로젝트 | `project = QA` / `project IN (QA, DEV)` |\n| issuetype (type) | 이슈 유형 | `issuetype = Bug` |\n| status | 상태 | `status = \"In Progress\"` |\n| statusCategory | 상태 분류 (To Do / In Progress / Done) | `statusCategory != Done` |\n| resolution | 해결 여부 | `resolution = Unresolved` |\n| priority | 우선순위 | `priority IN (Highest, High)` |\n| assignee | 담당자 | `assignee = currentUser()` / `assignee IS EMPTY` |\n| reporter | 보고자 | `reporter = currentUser()` |\n| creator | 생성자 | `creator = currentUser()` |\n| watcher | 지켜보는 사람 | `watcher = currentUser()` |\n| labels | 라벨 | `labels IN (회귀, 스모크)` |\n| component | 컴포넌트 | `component = 상점` |\n| fixVersion | 수정 버전 | `fixVersion = \"1.2.0\"` |\n| affectedVersion | 발생 버전 | `affectedVersion = \"1.1.0\"` |\n| sprint | 스프린트 | `sprint IN openSprints()` |\n| parent | 상위 이슈 (Cloud) | `parent = QA-100` |\n| \"Epic Link\" | 에픽 (Data Center) | `\"Epic Link\" = QA-100` |\n| issuekey (key) | 이슈 키 | `key IN (QA-1, QA-2)` |\n| created / updated / resolved | 생성일 / 수정일 / 해결일 | `created >= -7d` |\n| due (duedate) | 마감일 | `due < now()` |\n| summary / description / comment | 제목 / 설명 / 코멘트 | `summary ~ \"상점\"` |\n| text | 제목+설명+코멘트 전체 | `text ~ \"보상\"` |\n| issueLinkType | 링크 유형 | `issueLinkType = \"is blocked by\"` |\n| attachments | 첨부 여부 | `attachments IS EMPTY` |\n\n## 3. 연산자\n| 연산자 | 의미 | 예시 |\n|---|---|---|\n| = / != | 같음 / 다름 | `status = Open` |\n| > >= < <= | 크기·날짜 비교 | `created >= -30d` |\n| IN / NOT IN | 여러 값 중 하나 | `priority IN (Highest, High)` |\n| ~ / !~ | 텍스트 포함 / 미포함 | `summary ~ \"로그인\"` |\n| IS EMPTY / IS NOT EMPTY | 값 없음 / 있음 | `fixVersion IS EMPTY` |\n| WAS / WAS NOT | 과거에 그 값이었던 적 있음 | `status WAS Reopened` |\n| WAS IN / WAS NOT IN | 과거에 여러 값 중 하나였음 | `status WAS IN (Resolved, Closed)` |\n| CHANGED | 값이 바뀐 적 있음 | `status CHANGED` |\n\n**WAS / CHANGED 보조 조건** (status, assignee, priority, resolution, fixVersion, reporter 필드에서 사용)\n| 조건 | 예시 |\n|---|---|\n| FROM / TO | `status CHANGED FROM \"In Progress\" TO Resolved` |\n| BY | `status CHANGED BY currentUser()` |\n| AFTER / BEFORE / ON | `status CHANGED AFTER -7d` |\n| DURING | `status WAS Reopened DURING (startOfWeek(), now())` |\n\n## 4. 상대 날짜\n| 표현 | 의미 |\n|---|---|\n| `-1d`, `-7d`, `-2w`, `-1h`, `-30m` | 지금으로부터 1일 / 7일 / 2주 / 1시간 / 30분 전 |\n| `\"YYYY-MM-DD\"` | 특정 날짜 (그날 0시) |\n| `\"YYYY-MM-DD HH:mm\"` | 특정 날짜와 시간 |\n\n- `created >= -7d`는 지금부터 정확히 168시간 전이다. \"이번 주\"처럼 달력 기준이 필요하면 `startOfWeek()`를 쓴다.\n\n## 5. 기본 제공 함수\n\n### 사람·그룹\n| 함수 | 의미 | 예시 |\n|---|---|---|\n| currentUser() | 지금 로그인한 사람 | `assignee = currentUser()` |\n| membersOf(\"그룹\") | 그룹에 속한 사람 | `assignee IN membersOf(\"qa-team\")` |\n\n### 날짜\n| 함수 | 의미 | 예시 |\n|---|---|---|\n| now() | 지금 | `due < now()` |\n| startOfDay() / endOfDay() | 오늘 0시 / 오늘 끝 | `created >= startOfDay()` |\n| startOfWeek() / endOfWeek() | 이번 주 시작 / 끝 | `created >= startOfWeek()` |\n| startOfMonth() / endOfMonth() | 이번 달 시작 / 끝 | `resolved >= startOfMonth()` |\n| startOfYear() / endOfYear() | 올해 시작 / 끝 | `created >= startOfYear()` |\n| currentLogin() / lastLogin() | 이번 로그인 시각 / 직전 로그인 시각 | `updated >= lastLogin()` |\n\n- 괄호 안에 숫자를 넣으면 앞뒤로 옮긴다: `startOfDay(-1)` 어제 0시, `startOfWeek(-1)` 지난주 시작, `endOfWeek(-1)` 지난주 끝, `startOfMonth(-1)` 지난달 시작\n- 단위를 붙일 수도 있다: `startOfDay(\"-3d\")`, `startOfWeek(\"+1w\")`\n- 한 주의 시작 요일(일요일/월요일)은 JIRA 설정에 따라 다르다.\n\n### 스프린트\n| 함수 | 의미 | 예시 |\n|---|---|---|\n| openSprints() | 진행 중 스프린트 | `sprint IN openSprints()` |\n| closedSprints() | 종료된 스프린트 | `sprint IN closedSprints()` |\n| futureSprints() | 예정된 스프린트 | `sprint IN futureSprints()` |\n\n### 버전\n| 함수 | 의미 | 예시 |\n|---|---|---|\n| releasedVersions(\"프로젝트\") | 릴리즈된 버전 | `fixVersion IN releasedVersions(QA)` |\n| unreleasedVersions(\"프로젝트\") | 릴리즈 전 버전 | `fixVersion IN unreleasedVersions(QA)` |\n| latestReleasedVersion(\"프로젝트\") | 가장 최근 릴리즈 버전 | `affectedVersion = latestReleasedVersion(QA)` |\n| earliestUnreleasedVersion(\"프로젝트\") | 다음 릴리즈 예정 버전 | `fixVersion = earliestUnreleasedVersion(QA)` |\n\n### 이슈 관계·내 활동\n| 함수 | 의미 | 예시 |\n|---|---|---|\n| linkedIssues(\"키\", \"링크 유형\") | 특정 이슈와 링크된 이슈 | `issue IN linkedIssues(QA-100, \"blocks\")` |\n| issueHistory() | 내가 최근 본 이슈 | `issue IN issueHistory()` |\n| watchedIssues() | 내가 지켜보는 이슈 | `issue IN watchedIssues()` |\n| votedIssues() | 내가 투표한 이슈 | `issue IN votedIssues()` |\n| updatedBy(\"사용자\", \"시작\", \"끝\") | 특정 사람이 수정한 이슈 (Cloud) | `issue IN updatedBy(currentUser(), -7d)` |\n\n### 이슈 유형·프로젝트\n| 함수 | 의미 | 예시 |\n|---|---|---|\n| standardIssueTypes() | 하위 작업이 아닌 유형 | `issuetype IN standardIssueTypes()` |\n| subtaskIssueTypes() | 하위 작업 유형 | `issuetype IN subtaskIssueTypes()` |\n| projectsLeadByUser() | 내가 리드인 프로젝트 | `project IN projectsLeadByUser()` |\n| componentsLeadByUser() | 내가 리드인 컴포넌트 | `component IN componentsLeadByUser()` |\n| projectsWhereUserHasPermission(\"권한\") | 권한이 있는 프로젝트 | `project IN projectsWhereUserHasPermission(\"Resolve Issues\")` |\n| projectsWhereUserHasRole(\"역할\") | 역할이 있는 프로젝트 | `project IN projectsWhereUserHasRole(\"Developers\")` |\n\n### 저장된 필터 재사용\n- `filter = \"필터 이름\"` 또는 `filter = 10200`\n- 자주 쓰는 범위(예: \"QA 프로젝트의 미해결 버그\")를 필터로 저장해 두고 다른 쿼리에서 불러 쓰면 짧고 관리하기 쉽다.\n\n### 플러그인 함수 (설치된 경우만)\nScriptRunner 같은 플러그인이 있으면 `issueFunction in ...` 형태의 함수를 쓸 수 있다. 예: 하위 작업 조회, 코멘트 유무, 마지막 코멘트 작성자. **설치되지 않은 JIRA에서는 오류가 나므로, 사용자가 쓴다고 했을 때만 쓴다.**\n\n---\n\n## 6. 효율적인 JQL 작성 원칙\n\n| 원칙 | 나쁜 예 | 좋은 예 | 이유 |\n|---|---|---|---|\n| 범위를 먼저 좁힌다 | `summary ~ \"상점\"` | `project = QA AND summary ~ \"상점\"` | 전체 JIRA 검색은 느리고 결과가 섞인다 |\n| 상태 나열 대신 분류 사용 | `status IN (Open, \"In Progress\", Reopened, \"To Do\")` | `statusCategory != Done` 또는 `resolution = Unresolved` | 상태가 추가돼도 그대로 동작한다 |\n| OR 대신 IN | `priority = High OR priority = Highest` | `priority IN (Highest, High)` | 짧고 실수가 적다 |\n| AND·OR 섞이면 괄호 | `project = QA AND priority = High OR priority = Highest` | `project = QA AND priority IN (High, Highest)` | 괄호가 없으면 다른 프로젝트 이슈도 섞인다 |\n| 고정 날짜 대신 상대 날짜 | `created >= \"2026-10-20\"` | `created >= startOfWeek()` | 필터를 저장해도 매주 다시 고칠 필요가 없다 |\n| 사람 이름 대신 함수 | `assignee = \"홍길동\"` | `assignee = currentUser()` | 필터를 팀원과 공유해도 각자 기준으로 동작한다 |\n| 텍스트 검색 최소화 | `text ~ \"보상\"` | `component = 보상` 또는 `labels = 보상` | 텍스트 검색은 느리고 관계없는 이슈도 잡힌다 |\n| 반복 범위는 필터로 저장 | 매번 같은 조건 복사 | `filter = \"QA 미해결 버그\" AND assignee = currentUser()` | 조건을 한곳에서 관리할 수 있다 |\n| 빈 값은 IS EMPTY | `assignee = \"\"` | `assignee IS EMPTY` | `= \"\"`는 동작하지 않는다 |\n| 정렬은 마지막에 | `ORDER BY created AND project = QA` | `project = QA ORDER BY created DESC` | ORDER BY 뒤에는 조건을 쓸 수 없다 |\n\n**주의할 점**\n- `!=`, `NOT IN`은 값이 비어 있는 이슈를 포함하지 않는다. 빈 값도 포함하려면 `(assignee != currentUser() OR assignee IS EMPTY)`처럼 쓴다.\n- `~` 검색은 단어 단위라서 한국어는 원하는 대로 검색되지 않을 수 있다. 정확히 일치하는 문구는 `summary ~ \"\\\"출석 보상\\\"\"`처럼 따옴표를 한 번 더 감싼다.\n- 상태, 이슈 유형, 커스텀 필드 이름은 회사마다 다르다. 처음에는 JIRA 고급 검색 화면의 자동 완성으로 이름을 확인한다.\n\n---\n\n## 7. 자주 쓰는 JQL 모음 (QA 기준)\n\n### 내 업무\n| 용도 | JQL |\n|---|---|\n| 내 미해결 이슈 | `assignee = currentUser() AND resolution = Unresolved ORDER BY priority DESC, updated DESC` |\n| 내가 등록한 미해결 버그 | `reporter = currentUser() AND issuetype = Bug AND resolution = Unresolved ORDER BY created DESC` |\n| 내가 확인해야 할 수정 완료 이슈 | `reporter = currentUser() AND status = Resolved ORDER BY updated ASC` |\n| 마지막 로그인 후 바뀐 내 이슈 | `(assignee = currentUser() OR reporter = currentUser()) AND updated >= lastLogin()` |\n\n### 버그 현황\n| 용도 | JQL |\n|---|---|\n| 프로젝트 미해결 버그 | `project = QA AND issuetype = Bug AND resolution = Unresolved ORDER BY priority DESC` |\n| 오늘 등록된 버그 | `project = QA AND issuetype = Bug AND created >= startOfDay()` |\n| 이번 주 등록된 버그 | `project = QA AND issuetype = Bug AND created >= startOfWeek()` |\n| 지난주 등록된 버그 | `project = QA AND issuetype = Bug AND created >= startOfWeek(-1) AND created < startOfWeek()` |\n| 이번 주 해결된 버그 | `project = QA AND issuetype = Bug AND resolved >= startOfWeek()` |\n| 긴급 미해결 버그 | `project = QA AND issuetype = Bug AND priority IN (Highest, High) AND resolution = Unresolved` |\n| 담당자 미지정 버그 | `project = QA AND issuetype = Bug AND assignee IS EMPTY AND resolution = Unresolved` |\n| 7일 이상 업데이트 없는 이슈 | `project = QA AND resolution = Unresolved AND updated <= -7d ORDER BY updated ASC` |\n\n### 재오픈·이력\n| 용도 | JQL |\n|---|---|\n| 한 번이라도 재오픈된 이슈 | `project = QA AND status WAS Reopened` |\n| 이번 주 재오픈된 이슈 | `project = QA AND status CHANGED TO Reopened DURING (startOfWeek(), now())` |\n| 이번 주 내가 상태를 바꾼 이슈 | `status CHANGED BY currentUser() AFTER startOfWeek()` |\n| 해결됐다가 다시 열린 이슈 | `project = QA AND status CHANGED FROM Resolved TO Reopened` |\n\n### 버전·스프린트\n| 용도 | JQL |\n|---|---|\n| 다음 릴리즈 대상 미해결 이슈 | `project = QA AND fixVersion = earliestUnreleasedVersion(QA) AND resolution = Unresolved` |\n| 최근 릴리즈 버전에서 발견된 버그 | `project = QA AND issuetype = Bug AND affectedVersion = latestReleasedVersion(QA)` |\n| 수정 버전 미지정 버그 | `project = QA AND issuetype = Bug AND fixVersion IS EMPTY AND resolution = Unresolved` |\n| 현재 스프린트 미완료 이슈 | `project = QA AND sprint IN openSprints() AND statusCategory != Done` |\n\n### 기타\n| 용도 | JQL |\n|---|---|\n| 특정 이슈를 막고 있는 이슈 | `issue IN linkedIssues(QA-100, \"is blocked by\")` |\n| 첨부 없는 버그 | `project = QA AND issuetype = Bug AND attachments IS EMPTY` |\n| 특정 라벨 이슈 | `project = QA AND labels IN (회귀, 스모크)` |\n| 마감일 지난 이슈 | `project = QA AND due < now() AND resolution = Unresolved` |\n| QA팀이 담당한 이슈 | `assignee IN membersOf(\"qa-team\") AND resolution = Unresolved` |\n\n\n# 자주 쓰는 함수 목록 (팀 저장 JQL)\n\n팀에서 실제로 쓰는 JQL을 저장해 둔 목록이다. `/목록` 명령이나 비슷한 요청에는 이 쿼리를 먼저 보여준다.\n저장된 쿼리는 사용자가 준 그대로다. 사용자가 고쳐 달라고 하지 않으면 다른 형태로 바꾸지 않는다.\n\n## 팀 이슈 현황\n우리 팀이 등록하거나 맡은 이슈를 볼 때\n\n### 팀이 등록한 미해결 이슈 (여러 프로젝트)\n- 쓰는 경우: QA_TEAM 그룹이 여러 프로젝트에 등록한 이슈 중 아직 해결되지 않은 것을 볼 때\n- 저장일: 2026-11-13\n\n```\nproject IN (PROJ_A, PROJ_B, PROJ_C) AND reporter IN membersOf(\"QA_TEAM\") AND resolution = Unresolved ORDER BY priority DESC, created DESC\n```\n\n| 조건 | 뜻 |\n|---|---|\n| `project IN (…)` | 프로젝트 3개 (PROJ_A, PROJ_B, PROJ_C) |\n| `reporter IN membersOf(\"QA_TEAM\")` | 보고자가 QA_TEAM 그룹 구성원 |\n| `resolution = Unresolved` | 아직 해결되지 않은 이슈 |\n| `ORDER BY priority DESC, created DESC` | 우선순위 높은 순, 같으면 최근에 등록한 순 |\n\n## 기간별 등록 이슈\n이번 주, 이번 달처럼 기간을 정해 팀이 등록한 이슈를 볼 때\n\n### 팀이 등록한 이슈: 2026-11-09 ~ 11-13 (날짜 고정)\n- 쓰는 경우: QA_TEAM 그룹이 2026-11-09(월)부터 2026-11-13(금) 사이에 등록한 이슈를 볼 때\n- 저장일: 2026-11-13\n\n```\nreporter IN membersOf(\"QA_TEAM\") AND created >= \"2026-11-09\" AND created <= \"2026-11-13\" ORDER BY created DESC\n```\n\n| 조건 | 뜻 |\n|---|---|\n| `reporter IN membersOf(\"QA_TEAM\")` | 보고자가 QA_TEAM 그룹 구성원 |\n| `created >= \"2026-11-09\"` | 2026-11-09(월) 0시 이후에 등록 |\n| `created <= \"2026-11-13\"` | 2026-11-13(금) 0시까지 등록 |\n| `ORDER BY created DESC` | 최근에 등록한 순 |\n\n- 알아둘 점: 날짜만 쓰면 그날 0시로 계산된다. 그래서 13일 당일에 등록한 이슈는 빠진다. 13일까지 넣으려면 created < \"2026-11-14\"로 쓴다.\n\n### 팀이 이번 주에 등록한 이슈 (주마다 자동)\n- 쓰는 경우: QA_TEAM 그룹이 이번 주에 등록한 이슈를 볼 때. 주가 바뀌면 자동으로 그 주로 바뀐다\n- 저장일: 2026-11-13\n\n```\nreporter IN membersOf(\"QA_TEAM\") AND created >= startOfWeek() AND created <= endOfWeek() ORDER BY created DESC\n```\n\n| 조건 | 뜻 |\n|---|---|\n| `reporter IN membersOf(\"QA_TEAM\")` | 보고자가 QA_TEAM 그룹 구성원 |\n| `created >= startOfWeek()` | 이번 주 첫날 0시 이후에 등록 |\n| `created <= endOfWeek()` | 이번 주 마지막 날 끝까지 등록 (마지막 날 당일 포함) |\n| `ORDER BY created DESC` | 최근에 등록한 순 |\n\n- 알아둘 점: 한 주가 일요일에 시작하는지 월요일에 시작하는지는 JIRA 설정에 따른다. 지난주는 startOfWeek(-1)과 endOfWeek(-1)로 바꾼다.\n\n### 팀이 이번 달에 등록한 이슈 (달마다 자동)\n- 쓰는 경우: QA_TEAM 그룹이 이번 달에 등록한 이슈를 볼 때. 달이 바뀌면 자동으로 그 달로 바뀐다\n- 저장일: 2026-11-13\n\n```\nreporter IN membersOf(\"QA_TEAM\") AND created >= startOfMonth() AND created <= endOfMonth() ORDER BY created DESC\n```\n\n| 조건 | 뜻 |\n|---|---|\n| `reporter IN membersOf(\"QA_TEAM\")` | 보고자가 QA_TEAM 그룹 구성원 |\n| `created >= startOfMonth()` | 이번 달 1일 0시 이후에 등록 |\n| `created <= endOfMonth()` | 이번 달 마지막 날 끝까지 등록 |\n| `ORDER BY created DESC` | 최근에 등록한 순 |\n\n- 알아둘 점: 지난달은 startOfMonth(-1)과 endOfMonth(-1)로 바꾼다.\n\n## 저장된 쿼리에서 확인된 우리 팀 값\n새 JQL을 만들 때 사용자가 따로 말하지 않으면 예시 값(QA, qa-team) 대신 아래 값을 쓴다.\n\n| 항목 | 값 |\n|---|---|\n| 프로젝트 키 | PROJ_A, PROJ_B, PROJ_C |\n| 팀 그룹 | QA_TEAM |\n"}, {"id": "excel", "no": "05", "name": "Excel 함수", "role": "데이터 문서에서 보고 싶은 것을 말하면 알맞은 Excel 함수를 하나 추천하고, 바로 붙여넣을 수식과 적용 방법을 알려줍니다.", "files": ["instructions.md", "excel-functions.md", "bulk-data-functions.md"], "libs": [{"id": "bulk", "title": "대량 데이터 확인 함수 모음", "button": "대량 데이터 확인 함수 모음", "intro": "아이템 100개 이상처럼 행이 많은 기획서와 데이터 문서를 확인할 때 QA에서 자주 쓰는 함수입니다. 수식은 복사해서 쓰고, 내 파일에 맞는 수식이 필요하면 \"이 상황으로 질문하기\"를 누르세요.", "assume": "예시 기준: 기획서 시트의 A열 Alias, B열 명칭, C~F열 속성 / '데이터' 시트의 A열 alias, C~F열 값", "groups": [{"id": "lookup", "title": "값 가져오기", "hint": "다른 시트·파일에서 같은 Alias의 값을 가져올 때"}, {"id": "compare", "title": "값 비교", "hint": "기획 값과 데이터 값이 같은지 판정할 때"}, {"id": "missing", "title": "누락·중복", "hint": "한쪽에만 있는 행, 중복된 키, 빈칸을 찾을 때"}, {"id": "agg", "title": "개수·합계", "hint": "조건별 개수, 확률 합계, 범위를 확인할 때"}, {"id": "filter", "title": "걸러 보기", "hint": "조건에 맞는 행만 따로 모아 볼 때"}, {"id": "clean", "title": "값 정리", "hint": "공백, 대소문자, 숫자 형식 때문에 비교가 어긋날 때"}, {"id": "merge", "title": "합치기", "hint": "여러 시트나 열을 하나로 모을 때"}, {"id": "tools", "title": "엑셀 기능", "hint": "수식 대신 쓰면 빠른 엑셀 기능"}], "ver": {"all": "구버전 포함", "2019": "Excel 2019 이상", "2021": "Excel 2021 이상", "2024": "Microsoft 365 · Excel 2024", "365": "Microsoft 365 전용"}, "tips": ["FILTER, UNIQUE, XLOOKUP 배열 수식의 범위는 열 전체(A:A) 대신 실제 행 수(A2:A5000)로 잡는다. 열 전체를 배열로 넘기면 100만 행을 계산한다.", "같은 XLOOKUP을 여러 번 쓰는 수식은 LET으로 이름을 붙여 한 번만 계산한다.", "판정이 끝난 열은 복사 → 값으로 붙여넣기 해 두면 파일이 가벼워진다.", "수식이 많아 느리면 수식 → 계산 옵션 → 수동으로 바꾸고, 볼 때 F9로 계산한다.", "수만 행 이상이거나 매 빌드 반복하는 비교는 파워 쿼리나 데이터 비교 도구가 더 빠르다.", "COUNTIF, SUMIF, INDIRECT는 참조한 다른 파일이 닫혀 있으면 #VALUE!가 난다. 비교할 시트를 같은 파일로 복사해 두고 쓴다."], "tipsTitle": "대량 데이터에서 느려지지 않게 쓰는 법", "items": [{"group": "lookup", "name": "XLOOKUP", "ver": "2021", "use": "Alias로 데이터 문서의 값을 가져올 때", "formula": "=XLOOKUP(A2, 데이터!$A:$A, 데이터!$D:$D, \"없음\")", "note": "없는 Alias는 \"없음\"으로 나온다. 왼쪽 열도 가져올 수 있다.", "ask": "/함수 기획서 A열 Alias로 데이터 시트 A열에서 찾아서 D열 값을 가져오고 싶어. 없으면 '없음'으로 표시해줘."}, {"group": "lookup", "name": "XLOOKUP (여러 열 한 번에)", "ver": "2021", "use": "한 Alias의 속성 여러 개를 한 수식으로 가져올 때", "formula": "=XLOOKUP(A2, 데이터!$A:$A, 데이터!$C:$F, \"없음\")", "note": "C~F열 값이 오른쪽으로 함께 펼쳐진다. 표(Ctrl+T) 안에서는 펼쳐지지 않으니 일반 범위에서 쓴다.", "ask": "/함수 Alias 하나로 데이터 시트의 C~F열 값 4개를 한 번에 가져오고 싶어."}, {"group": "lookup", "name": "INDEX + MATCH", "ver": "all", "use": "XLOOKUP이 없는 Excel에서 값을 가져올 때", "formula": "=INDEX(데이터!$D:$D, MATCH(A2, 데이터!$A:$A, 0))", "note": "없는 값은 #N/A가 나온다. IFERROR(수식, \"없음\")으로 감싼다.", "ask": "/함수 XLOOKUP이 안 되는 Excel에서 Alias로 다른 시트 값을 가져오는 방법 알려줘."}, {"group": "lookup", "name": "XLOOKUP (기준 열 2개)", "ver": "2021", "use": "상품 ID + 구성품 Alias처럼 두 열이 같아야 같은 행일 때", "formula": "=XLOOKUP(A2&\"|\"&C2, 데이터!$A$2:$A$5000&\"|\"&데이터!$C$2:$C$5000, 데이터!$E$2:$E$5000, \"없음\")", "note": "범위는 열 전체(A:A)가 아니라 실제 행 수만큼만 잡는다. 열 전체를 쓰면 매우 느려진다.", "ask": "/함수 상품 ID(A열)와 구성품 Alias(C열) 두 개가 모두 같은 행의 수량을 데이터 시트에서 가져오고 싶어."}, {"group": "lookup", "name": "VLOOKUP", "ver": "all", "use": "구버전에서 가장 익숙한 방법으로 값을 가져올 때", "formula": "=VLOOKUP(A2, 데이터!$A:$F, 4, FALSE)", "note": "마지막 인수는 반드시 FALSE. 찾는 열이 범위의 첫 열이어야 하고, 열을 끼워 넣으면 번호가 어긋난다.", "ask": "/설명 =VLOOKUP(A2, 데이터!$A:$F, 4, FALSE)"}, {"group": "compare", "name": "IF + XLOOKUP", "ver": "2021", "use": "기획 값과 데이터 값이 같은지 Pass/Fail로 표시할 때", "formula": "=IF(XLOOKUP(A2, 데이터!$A:$A, 데이터!$D:$D, \"없음\")=D2, \"Pass\", \"Fail\")", "note": "= 비교는 영문 대소문자를 구분하지 않는다. 데이터에 없는 Alias도 Fail이 된다.", "ask": "/비교 기획서 D열 값과 데이터 시트 D열 값을 Alias 기준으로 비교해서 Pass/Fail로 표시하고 싶어."}, {"group": "compare", "name": "가능/불가 ↔ Y/N 비교", "ver": "2021", "use": "기획서는 가능/불가, 데이터 문서는 Y/N(소문자 포함)일 때", "formula": "=IF(IF(D2=\"가능\",\"Y\",\"N\")=UPPER(TRIM(XLOOKUP(A2, 데이터!$A:$A, 데이터!$D:$D, \"\"))), \"Pass\", \"Fail\")", "note": "UPPER로 소문자 y/n을, TRIM으로 앞뒤 공백을 맞춘다.", "ask": "/비교 기획서는 가능/불가, 데이터 문서는 Y/N으로 적혀 있어. Alias 기준으로 같은 뜻인지 Pass/Fail로 표시해줘."}, {"group": "compare", "name": "확률·수치 비교 (오차 허용)", "ver": "2021", "use": "0.5%와 0.005처럼 숫자 값을 비교할 때", "formula": "=IF(ABS(XLOOKUP(A2, 데이터!$A:$A, 데이터!$C:$C, 0)-D2)<=0.000001, \"Pass\", \"Fail\")", "note": "기획 값이 \"0.5%\" 텍스트면 D2 대신 VALUE(D2)를 쓴다. 소수 계산 오차 때문에 = 대신 차이의 크기로 비교한다.", "ask": "/비교 기획서 확률(D열)과 데이터 시트 prob(C열)을 Alias 기준으로 비교하고 싶어. 기획서는 0.5%처럼, 데이터는 0.005처럼 적혀 있어."}, {"group": "compare", "name": "다른 열 이름 나열", "ver": "2021", "use": "아이템마다 어느 속성이 다른지 한 칸에 보고 싶을 때", "formula": "=IFERROR(TEXTJOIN(\", \", TRUE, IF(C2:F2<>XLOOKUP(A2, 데이터!$A:$A, 데이터!$C:$F), $C$1:$F$1, \"\")), \"데이터 없음\")", "note": "빈칸이면 모두 일치. \"판매 여부, 거래 여부\"처럼 다른 열의 헤더가 나온다.", "ask": "/비교 아이템 한 행에서 C~F열 속성 중 데이터 시트와 다른 열 이름만 한 칸에 나열하고 싶어."}, {"group": "compare", "name": "EXACT + SUMPRODUCT", "ver": "all", "use": "영문 대소문자까지 정확히 같은 Alias가 있는지 볼 때", "formula": "=IF(SUMPRODUCT(--EXACT(A2, 데이터!$A$2:$A$5000))>0, \"\", \"대소문자 다름 또는 없음\")", "note": "= 비교와 XLOOKUP은 item_01과 ITEM_01을 같다고 본다. 대소문자가 중요한 키는 EXACT로 확인한다.", "ask": "/함수 Alias가 대소문자까지 정확히 같은지 확인하는 방법 알려줘."}, {"group": "compare", "name": "SUMPRODUCT (불일치 칸 수)", "ver": "all", "use": "행 순서와 크기가 같은 두 표에서 다른 칸이 몇 개인지 셀 때", "formula": "=SUMPRODUCT(--(기획!C2:F200<>데이터!C2:F200))", "note": "두 표의 행 순서가 같을 때만 쓴다. 순서가 다르면 XLOOKUP 비교를 쓴다.", "ask": "/비교 행 순서가 같은 두 시트에서 C2:F200 범위의 다른 칸이 몇 개인지 세고 싶어."}, {"group": "compare", "name": "BYROW + LAMBDA", "ver": "2024", "use": "행 순서가 같은 두 표를 행마다 한 번에 판정할 때", "formula": "=BYROW(기획!C2:F200=데이터!C2:F200, LAMBDA(r, IF(AND(r), \"Pass\", \"Fail\")))", "note": "수식 하나로 200행 결과가 아래로 펼쳐진다.", "ask": "/비교 행 순서가 같은 두 시트를 행 단위로 한 번에 Pass/Fail 판정하는 수식 알려줘."}, {"group": "missing", "name": "COUNTIF (없는 값 표시)", "ver": "all", "use": "기획서 아이템이 데이터 문서에 있는지 표시할 때", "formula": "=IF(COUNTIF(데이터!$A:$A, A2)=0, \"데이터에 없음\", \"\")", "note": "방향을 바꿔 데이터 시트에도 넣으면 기획서에 없는 아이템을 찾는다. 참조한 파일이 닫혀 있으면 #VALUE!가 난다.", "ask": "/비교 기획서에는 있는데 데이터 시트에는 없는 Alias를 표시하고 싶어."}, {"group": "missing", "name": "FILTER + COUNTIF (누락 목록)", "ver": "2021", "use": "한쪽에만 있는 Alias를 목록으로 뽑을 때", "formula": "=FILTER(A2:A200, COUNTIF(데이터!$A$2:$A$5000, A2:A200)=0, \"없음\")", "note": "누락된 Alias만 아래로 나열된다. 이슈에 그대로 붙여넣기 좋다.", "ask": "/비교 기획서에만 있고 데이터 시트에 없는 Alias만 목록으로 뽑고 싶어."}, {"group": "missing", "name": "COUNTIF (중복 표시)", "ver": "all", "use": "Alias가 두 번 이상 들어갔는지 표시할 때", "formula": "=IF(COUNTIF($A:$A, A2)>1, \"중복\", \"\")", "note": "", "ask": "/함수 A열 Alias 중에 중복된 값을 표시하고 싶어."}, {"group": "missing", "name": "LET + UNIQUE + FILTER (중복 목록)", "ver": "2021", "use": "중복된 값만 한 번씩 뽑아 볼 때", "formula": "=LET(u, UNIQUE(A2:A200), FILTER(u, COUNTIF(A2:A200, u)>1, \"중복 없음\"))", "note": "", "ask": "/함수 A열에서 두 번 이상 나온 Alias만 목록으로 뽑고 싶어."}, {"group": "missing", "name": "COUNTA − UNIQUE (개수 대조)", "ver": "2021", "use": "행 수와 고유 값 수가 같은지 한 칸으로 확인할 때", "formula": "=COUNTA(A2:A5000)-ROWS(UNIQUE(FILTER(A2:A5000, A2:A5000<>\"\")))", "note": "0이면 중복 없음. 기획서 아이템 수와 데이터 문서 아이템 수를 먼저 맞춰 볼 때도 COUNTA를 쓴다.", "ask": "/함수 A열 Alias 개수와 중복을 뺀 개수가 같은지 확인하고 싶어."}, {"group": "missing", "name": "COUNTBLANK", "ver": "all", "use": "속성 칸에 빈칸이 있는 행을 찾을 때", "formula": "=IF(COUNTBLANK(C2:F2)>0, \"빈칸 있음\", \"\")", "note": "", "ask": "/함수 C~F열 중 하나라도 비어 있는 행을 표시하고 싶어."}, {"group": "agg", "name": "COUNTIFS", "ver": "all", "use": "조건에 맞는 아이템이 몇 개인지 셀 때", "formula": "=COUNTIFS($C:$C, \"전설\", $G:$G, \"불가\")", "note": "와일드카드도 된다: =COUNTIFS($A:$A, \"ITEM_CR_*\"). 비교 기호는 \">=10\", \"<>\"&A2처럼 쓴다.", "ask": "/함수 등급이 전설이고 거래 여부가 불가인 아이템 개수를 세고 싶어."}, {"group": "agg", "name": "SUMIFS (확률 합계 100%)", "ver": "all", "use": "드랍 그룹·상자별 확률 합이 100%인지 확인할 때", "formula": "=IF(ABS(SUMIFS($D:$D, $A:$A, A2)-1)<0.000001, \"OK\", \"합계 \"&TEXT(SUMIFS($D:$D, $A:$A, A2), \"0.00%\"))", "note": "A열이 그룹, D열이 확률. 합이 100%가 아니면 실제 합계를 보여준다.", "ask": "/함수 드랍 그룹(A열)별로 확률(D열) 합이 100%인지 확인하고 싶어."}, {"group": "agg", "name": "MAXIFS / MINIFS", "ver": "2019", "use": "등급별 최댓값·최솟값이 기획 범위 안인지 볼 때", "formula": "=MAXIFS($E:$E, $C:$C, \"전설\")", "note": "구버전 대안: =MAX(IF($C$2:$C$200=\"전설\", $E$2:$E$200)) 입력 후 Ctrl+Shift+Enter.", "ask": "/함수 등급이 전설인 아이템의 공격력 최댓값과 최솟값을 구하고 싶어."}, {"group": "agg", "name": "COUNTIFS (범위 밖 값)", "ver": "all", "use": "기획 범위(AA~BB)를 벗어난 값이 몇 개인지 셀 때", "formula": "=COUNTIFS($E:$E, \"<\"&$J$1)+COUNTIFS($E:$E, \">\"&$J$2)", "note": "J1에 최솟값, J2에 최댓값을 적는다. 0이면 모두 범위 안.", "ask": "/함수 E열 수치가 최솟값(J1)~최댓값(J2) 범위를 벗어난 개수를 세고 싶어."}, {"group": "agg", "name": "GROUPBY", "ver": "365", "use": "속성 조합별로 아이템이 몇 개인지 표로 볼 때", "formula": "=GROUPBY(C2:F200, A2:A200, COUNTA)", "note": "Microsoft 365 전용. 아이템이 1~2개뿐인 드문 조합은 기획 실수일 수 있어 먼저 확인한다. 대안은 아래 UNIQUE + COUNTIFS.", "ask": "/함수 파괴·판매·분해·거래 여부 조합별로 아이템이 몇 개씩 있는지 표로 보고 싶어."}, {"group": "agg", "name": "UNIQUE + COUNTIFS (조합별 개수)", "ver": "2021", "use": "GROUPBY 없이 속성 조합별 개수를 볼 때", "formula": "=UNIQUE(C2:F200)", "note": "H2에 넣으면 조합이 펼쳐진다. L2에 =COUNTIFS($C$2:$C$200, H2, $D$2:$D$200, I2, $E$2:$E$200, J2, $F$2:$F$200, K2)를 넣고 아래로 채운다.", "ask": "/함수 GROUPBY가 없는 Excel에서 속성 4개 조합별 아이템 개수를 구하고 싶어."}, {"group": "filter", "name": "FILTER (조건 행만)", "ver": "2021", "use": "조건에 맞는 아이템만 따로 모아 볼 때", "formula": "=FILTER(A2:F200, (C2:C200=\"전설\")*(F2:F200=\"불가\"), \"없음\")", "note": "*는 AND, +는 OR. 원본은 그대로 두고 결과만 다른 곳에 펼쳐진다.", "ask": "/함수 등급이 전설이면서 거래 불가인 아이템 행만 따로 모아 보고 싶어."}, {"group": "filter", "name": "FILTER (Fail만 모으기)", "ver": "2021", "use": "판정 결과가 Fail인 행만 모아 이슈에 붙일 때", "formula": "=FILTER(A2:H200, H2:H200=\"Fail\", \"Fail 없음\")", "note": "", "ask": "/함수 H열 결과가 Fail인 행만 다른 시트에 모으고 싶어."}, {"group": "filter", "name": "FILTER + SEARCH (포함 검색)", "ver": "2021", "use": "이름에 특정 단어가 들어간 아이템만 볼 때", "formula": "=FILTER(A2:F200, ISNUMBER(SEARCH(\"천랑\", B2:B200)), \"없음\")", "note": "SEARCH는 대소문자를 구분하지 않는다.", "ask": "/함수 아이템 명칭(B열)에 '천랑'이 들어간 행만 보고 싶어."}, {"group": "filter", "name": "SORTBY", "ver": "2021", "use": "등급 → 수치처럼 여러 기준으로 정렬해 볼 때", "formula": "=SORTBY(A2:F200, C2:C200, 1, E2:E200, -1)", "note": "1은 오름차순, -1은 내림차순. 원본 순서는 바뀌지 않는다.", "ask": "/함수 등급(C열) 오름차순, 그 안에서 수치(E열) 내림차순으로 정렬한 표를 보고 싶어."}, {"group": "filter", "name": "CHOOSECOLS", "ver": "2024", "use": "결과에서 필요한 열만 골라 볼 때", "formula": "=CHOOSECOLS(FILTER(A2:H200, H2:H200=\"Fail\"), 1, 2, 8)", "note": "1·2·8번째 열(Alias, 명칭, 결과)만 보여준다.", "ask": "/함수 Fail인 행에서 Alias, 명칭, 결과 열만 뽑아 보고 싶어."}, {"group": "clean", "name": "TRIM + CLEAN", "ver": "all", "use": "눈에 안 보이는 공백 때문에 같은 값이 다르다고 나올 때", "formula": "=TRIM(CLEAN(SUBSTITUTE(A2, CHAR(160), \" \")))", "note": "공백이 있는지 검사: =LEN(A2)<>LEN(TRIM(A2)) 가 TRUE면 앞뒤나 중간에 남는 공백이 있다.", "ask": "/오류 값이 똑같아 보이는데 XLOOKUP이 #N/A가 나와. 공백 때문인지 확인하고 정리하는 방법 알려줘."}, {"group": "clean", "name": "VALUE / ISNUMBER", "ver": "all", "use": "숫자가 텍스트로 들어가 비교가 어긋날 때", "formula": "=VALUE(D2)", "note": "=ISNUMBER(D2)가 FALSE면 텍스트다. VALUE는 \"1,000\"과 \"0.5%\"도 숫자로 바꾼다.", "ask": "/오류 숫자가 같은데 비교하면 다르다고 나와. 텍스트로 들어간 숫자인지 확인하고 바꾸는 방법 알려줘."}, {"group": "clean", "name": "UPPER / LOWER", "ver": "all", "use": "Y/N, Alias의 대소문자를 통일할 때", "formula": "=UPPER(TRIM(D2))", "note": "", "ask": "/함수 y, Y, n, N이 섞인 열을 대문자로 통일하고 싶어."}, {"group": "clean", "name": "TEXTSPLIT", "ver": "2024", "use": "\"검/반지/목걸이\"처럼 한 칸에 든 값을 나눌 때", "formula": "=TEXTSPLIT(A2, \"/\")", "note": "구버전 대안: 데이터 → 텍스트 나누기.", "ask": "/함수 한 칸에 '검/반지/목걸이'처럼 들어 있는 값을 칸마다 나누고 싶어."}, {"group": "clean", "name": "TEXTBEFORE / TEXTAFTER", "ver": "2024", "use": "Alias에서 종류나 번호 부분만 꺼낼 때", "formula": "=TEXTAFTER(A2, \"_\", -1)", "note": "ITEM_CR_WPN_01에서 01을 꺼낸다. -1은 마지막 구분자 기준. 구버전은 LEFT / MID / FIND를 쓴다.", "ask": "/함수 ITEM_CR_WPN_01 같은 Alias에서 마지막 번호만 꺼내고 싶어."}, {"group": "clean", "name": "AND + LEFT + LEN + EXACT (형식 검사)", "ver": "all", "use": "Alias가 정해진 형식인지 한 번에 검사할 때", "formula": "=AND(LEFT(A2,5)=\"ITEM_\", LEN(A2)=14, EXACT(A2, UPPER(A2)))", "note": "접두어, 글자 수, 대문자 여부를 함께 본다. 조건은 프로젝트 규칙에 맞게 바꾼다.", "ask": "/함수 Alias가 'ITEM_'으로 시작하고 14글자이며 모두 대문자인지 검사하고 싶어."}, {"group": "merge", "name": "VSTACK", "ver": "2024", "use": "무기·방어구·장신구처럼 나뉜 시트를 한 표로 모을 때", "formula": "=LET(v, VSTACK(무기!A2:F100, 방어구!A2:F100, 장신구!A2:F100), FILTER(v, CHOOSECOLS(v, 1)<>\"\"))", "note": "FILTER로 빈 행을 뺀다. 시트가 나란히 있으면 VSTACK(무기:장신구!A2:F100)처럼 한 번에 쓸 수 있다.", "ask": "/함수 무기, 방어구, 장신구 시트에 나뉜 같은 형식의 표를 한 시트에 위아래로 합치고 싶어."}, {"group": "merge", "name": "HSTACK + XLOOKUP", "ver": "2024", "use": "기획 값 옆에 데이터 값을 나란히 붙여 볼 때", "formula": "=HSTACK(A2:B200, XLOOKUP(A2:A200, 데이터!$A$2:$A$5000, 데이터!$D$2:$D$5000, \"없음\"))", "note": "Alias, 명칭, 데이터 값이 한 표로 펼쳐진다.", "ask": "/함수 기획서 Alias와 명칭 옆에 데이터 시트 값을 나란히 붙인 표를 만들고 싶어."}, {"group": "merge", "name": "TOCOL", "ver": "2024", "use": "여러 열에 흩어진 Alias를 한 열로 모을 때", "formula": "=TOCOL(B2:F50, 1)", "note": "두 번째 인수 1은 빈칸을 뺀다. 구성품 1~5 열에 든 Alias를 모아 UNIQUE로 목록을 만들 때 쓴다.", "ask": "/함수 B~F열에 흩어진 구성품 Alias를 빈칸 없이 한 열로 모으고 싶어."}, {"group": "merge", "name": "INDIRECT (시트별 행 수)", "ver": "all", "use": "시트 이름 목록으로 시트마다 행 수를 한눈에 볼 때", "formula": "=COUNTA(INDIRECT(\"'\"&A2&\"'!A:A\"))-1", "note": "A2에 시트 이름. 다른 파일을 참조할 때는 그 파일이 열려 있어야 한다.", "ask": "/함수 A열에 적은 시트 이름마다 그 시트의 데이터 행 수를 구하고 싶어."}, {"group": "tools", "name": "조건부 서식 (불일치 칠하기)", "ver": "2021", "use": "다른 값을 색으로 바로 보고 싶을 때", "formula": "=D2<>XLOOKUP($A2, 데이터!$A:$A, 데이터!$D:$D, \"\")", "note": "범위 선택 → 홈 → 조건부 서식 → 새 규칙 → \"수식을 사용하여 서식을 지정할 셀 결정\"에 이 수식을 넣는다.", "ask": "/비교 기획서 D열에서 데이터 시트 값과 다른 칸에 색을 칠하고 싶어."}, {"group": "tools", "name": "조건부 서식 (중복 값)", "ver": "all", "use": "수식 없이 중복된 Alias를 색으로 볼 때", "formula": "홈 → 조건부 서식 → 셀 강조 규칙 → 중복 값", "note": "", "ask": "/함수 수식 없이 중복된 Alias에 색을 칠하는 방법 알려줘."}, {"group": "tools", "name": "표로 만들기 (Ctrl+T)", "ver": "all", "use": "행이 늘어도 수식 범위가 자동으로 따라오게 할 때", "formula": "=COUNTIFS(표1[등급], \"전설\")", "note": "표 안에서는 열 이름으로 참조한다. 필터와 정렬 버튼이 자동으로 붙는다. FILTER처럼 펼쳐지는 수식은 표 밖에 쓴다.", "ask": "/함수 데이터를 표(Ctrl+T)로 만들었을 때 열 이름으로 COUNTIFS 쓰는 방법 알려줘."}, {"group": "tools", "name": "피벗 테이블", "ver": "all", "use": "등급·종류·속성별 개수를 끌어다 놓기로 볼 때", "formula": "삽입 → 피벗 테이블 → 행에 등급·속성, 값에 Alias(개수)", "note": "수식 없이 조합별 개수를 본다. 원본이 바뀌면 새로 고침을 누른다.", "ask": "/함수 피벗 테이블로 등급과 거래 여부별 아이템 개수를 보는 방법 알려줘."}, {"group": "tools", "name": "파워 쿼리 (쿼리 병합)", "ver": "all", "use": "수만 행이거나 매 빌드마다 같은 비교를 반복할 때", "formula": "데이터 → 데이터 가져오기 → 쿼리 결합 → 병합 → 조인 종류: 왼쪽 앤티(첫 번째에만 있는 행)", "note": "수식보다 가볍고, 파일만 바꾼 뒤 새로 고침 한 번으로 다시 비교된다.", "ask": "/함수 파워 쿼리로 기획서에만 있고 데이터 문서에 없는 행을 찾는 방법 알려줘."}, {"group": "tools", "name": "이동 옵션 (빈 셀 선택)", "ver": "all", "use": "수백 행에서 빈칸만 한 번에 골라낼 때", "formula": "범위 선택 → Ctrl+G → 옵션 → 빈 셀", "note": "선택된 빈칸에 색을 칠하거나 값을 한 번에 넣을 수 있다(입력 후 Ctrl+Enter).", "ask": "/함수 범위 안의 빈칸만 한 번에 선택하는 방법 알려줘."}]}], "cmds": [["/함수", "하고 싶은 일로 함수 추천과 수식"], ["/설명", "기존 수식 설명"], ["/오류", "오류 원인과 수정한 수식"], ["/비교", "기획 데이터와 실제 데이터 비교"], ["/사전", "함수 하나의 사용법"], ["/대량", "대량 데이터 확인 함수 안내"]], "examples": [], "scope": "Excel 함수 추천, 수식 작성·설명·오류 수정, 데이터 비교 수식과 조건부 서식, 파워 쿼리 안내", "extra": "", "instr": "# 역할\n너는 **Excel 함수 추천 에이전트**다.\n사용자는 QA 업무에서 기획 데이터 문서(아이템, 보상, 확률, 능력치 표 등)를 찾고 비교하기 위해 Excel을 쓴다. 함수는 잘 모를 수 있다고 가정한다.\n사용자가 \"무엇을 보고 싶은지\"를 말하면, 가장 알맞은 함수를 추천하고 바로 붙여넣을 수 있는 수식을 보여준다.\n함수 목록과 상황별 추천은 지식 파일 `excel-functions.md`를 따른다.\n아이템 100개 이상처럼 행이 많은 데이터를 확인하는 요청에는 지식 파일 `bulk-data-functions.md`(대량 데이터 확인 함수 모음)의 수식을 먼저 쓴다.\n\n# 동작 방식\n1. 요청에서 아래를 파악한다.\n   - 하고 싶은 일: 찾기 / 합치기 / 비교 / 걸러내기 / 개수·합계 / 정리(텍스트 나누기 등)\n   - 데이터 위치: 같은 시트 / 다른 시트 / 다른 파일\n   - 기준이 되는 값: 어떤 값으로 연결하는지 (예: 아이템ID, NPC Alias)\n   - 결과를 놓을 위치\n2. 결과가 크게 달라지는 정보가 빠졌을 때만 짧게 묻는다. 주로 **기준 값이 어느 열에 있는지**, **Excel 버전**이다.\n   - 버전을 모르면 Microsoft 365 기준으로 추천하고, 구버전용 대안을 함께 준다.\n   - 열 위치를 모르면 `A열`, `B열`처럼 예시 위치로 쓰고 \"가정한 위치\"에 적는다.\n3. 추천 함수는 **하나**를 고르고, 왜 그 함수가 맞는지 한 줄로 설명한다. 다른 방법은 \"대안\"으로만 짧게 적는다.\n4. 수식이 길어지면 `LET`이나 단계별 보조 열을 쓰는 방법을 함께 제안한다.\n\n# 출력 형식\n항상 아래 순서로 답한다.\n\n**추천 함수: OO 함수**\nOO 함수를 사용하는 것을 추천드립니다. (이유 한 줄)\n\n```\n=수식 (바로 복사할 수 있게 코드블록)\n```\n\n**수식 설명**\n| 부분 | 의미 |\n|---|---|\n| (수식 조각) | (무엇을 하는지) |\n\n**적용 방법**\n1. 어느 셀에 입력하는지\n2. 아래로 채우기(드래그)가 필요한지\n3. 다른 파일을 쓰면 두 파일을 어떻게 열어 두어야 하는지\n\n**가정한 부분:** (열 위치, 시트 이름, 파일 이름 등 임의로 정한 값)\n**대안:** (구버전용 함수, 또는 더 간단한 방법)\n**주의:** (오류가 날 수 있는 상황과 해결법)\n\n# 작성 원칙\n- 수식은 실제로 동작하는 형태로 쓴다. 함수 이름이나 인수를 지어내지 않는다. 확실하지 않으면 확인이 필요하다고 말한다.\n- 한국어 Excel에서도 함수 이름은 영문 그대로 쓰인다. 인수 구분 기호는 쉼표(,)로 쓴다.\n- 다른 파일을 참조할 때는 `'[파일명.xlsx]시트명'!A:A` 형식으로 쓰고, 파일 이름과 시트 이름에 공백이 있으면 작은따옴표로 감싼다.\n- 다른 파일에서 값을 자주 합쳐야 하면 수식보다 **파워 쿼리**가 나은지 판단해서 알려준다.\n- 원본 데이터를 바꾸는 방법(값 덮어쓰기, 행 삭제)은 먼저 사본에서 해 보라고 안내한다.\n- 행이 많은 데이터에서는 배열 수식의 범위를 열 전체(A:A)가 아니라 실제 행 수(A2:A5000)로 잡고, 수만 행이거나 매 빌드 반복하는 비교는 파워 쿼리나 데이터 비교 도구를 권한다.\n- 함수 하나의 사용법을 물으면 지식 파일의 함수 표를 바탕으로 쉬운 예시 하나와 함께 설명한다.\n\n# 명령어\n| 명령 | 수행 내용 |\n|---|---|\n| `/함수` + 하고 싶은 일 | 상황에 맞는 함수 추천과 수식 작성 |\n| `/설명` + 수식 | 기존 수식이 무엇을 하는지 한 부분씩 풀어서 설명 |\n| `/오류` + 수식 + 오류 값(#N/A 등) | 오류 원인과 수정한 수식 |\n| `/비교` + 두 데이터 설명 | 기획 데이터와 실제 데이터의 차이를 찾는 수식과 조건부 서식 |\n| `/사전` + 함수 이름 | 함수 사용법, 인수, 쉬운 예시 |\n| `/대량` (+ 상황) | 대량 데이터 확인 함수 모음에서 상황에 맞는 함수 안내. 상황 없이 쓰면 8개 상황(값 가져오기, 값 비교, 누락·중복, 개수·합계, 걸러 보기, 값 정리, 합치기, 엑셀 기능)별 대표 함수를 표로 보여줌 |\n\n# 요청 양식 안내\n요청이 애매하면 아래 양식을 보여주고 채워 달라고 한다.\n```\n/함수\n- 하고 싶은 일: \n- 데이터 위치: (같은 시트 / 다른 시트 / 다른 파일 — 파일명, 시트명)\n- 기준 값과 열: (예: 아이템ID, A열)\n- 가져올 값과 열: (예: 가격, D열)\n- 결과를 놓을 위치: \n- Excel 버전: (모르면 비워 두기)\n```\n", "know": "# Excel 함수 레퍼런스 (데이터 문서 찾기·비교용)\n\n버전 표기: **365** = Microsoft 365 / Excel 2024 이상, **2021** = Excel 2021 이상, **전체** = 구버전 포함 대부분\n\n---\n\n## 1. 상황별 추천 (먼저 이 표로 판단)\n\n| 하고 싶은 일 | 1순위 | 구버전 대안 | 비고 |\n|---|---|---|---|\n| 다른 파일·시트에서 같은 키의 값을 가져오기 | XLOOKUP | INDEX + MATCH, VLOOKUP | 2개 파일을 1개 파일에서 보는 가장 흔한 경우 |\n| 한 키로 여러 열을 한 번에 가져오기 | XLOOKUP (반환 범위를 여러 열로) | INDEX + MATCH를 열마다 | |\n| 조건에 맞는 행 전체를 걸러서 보기 | FILTER | 자동 필터, 고급 필터 | |\n| 중복 없이 목록 뽑기 | UNIQUE | 데이터 → 중복 항목 제거 | |\n| 두 표를 위아래로 합치기 | VSTACK | 복사·붙여넣기, 파워 쿼리 | VSTACK은 365 |\n| 두 표를 옆으로 붙이기 | HSTACK | 복사·붙여넣기 | HSTACK은 365 |\n| 원하는 열만 골라서 보기 | CHOOSECOLS | INDEX | 365 |\n| 기획 값과 실제 값이 다른지 비교 | IF + XLOOKUP, 또는 `=A2=B2` | IF + VLOOKUP | 조건부 서식과 함께 |\n| 한쪽에만 있는 데이터 찾기 | COUNTIF, 또는 ISNA + MATCH | 같음 | |\n| 조건별 개수·합계 | COUNTIFS, SUMIFS | 같음 | |\n| 조건별 최댓값·최솟값 | MAXIFS, MINIFS | MAX + IF (배열 수식) | 2019 이상 |\n| 텍스트 나누기 (예: \"A/B/C\") | TEXTSPLIT | 데이터 → 텍스트 나누기, MID + FIND | TEXTSPLIT은 365 |\n| 특정 글자 앞·뒤만 꺼내기 | TEXTBEFORE, TEXTAFTER | LEFT/MID + FIND | 365 |\n| 여러 값을 한 셀에 이어 붙이기 | TEXTJOIN | & 연산자 | 2019 이상 |\n| 특정 단어 포함 여부 | ISNUMBER + SEARCH | 같음 | |\n| 오류 대신 빈칸·문구 표시 | IFERROR, IFNA | 같음 | |\n| 여러 파일을 정기적으로 합치기 | **파워 쿼리** | — | 수식이 무거워질 때 |\n\n---\n\n## 2. 찾기·가져오기\n\n| 함수 | 형식 | 설명 | 버전 |\n|---|---|---|---|\n| XLOOKUP | `=XLOOKUP(찾을값, 찾을범위, 가져올범위, [없을때], [일치방식], [검색방향])` | 키로 값을 찾아 가져온다. 왼쪽 열도 가져올 수 있고, 없을 때 문구를 바로 지정할 수 있다. | 2021 |\n| VLOOKUP | `=VLOOKUP(찾을값, 표범위, 열번호, FALSE)` | 표의 첫 열에서 찾고 오른쪽 n번째 열 값을 가져온다. 마지막 인수는 반드시 FALSE(정확히 일치). | 전체 |\n| HLOOKUP | `=HLOOKUP(찾을값, 표범위, 행번호, FALSE)` | 가로로 된 표에서 찾는다. | 전체 |\n| INDEX | `=INDEX(범위, 행번호, [열번호])` | 범위에서 n번째 값을 꺼낸다. | 전체 |\n| MATCH | `=MATCH(찾을값, 범위, 0)` | 값이 몇 번째에 있는지 찾는다. 0은 정확히 일치. | 전체 |\n| INDEX + MATCH | `=INDEX(가져올열, MATCH(찾을값, 찾을열, 0))` | VLOOKUP의 단점(왼쪽 열 불가, 열 삽입 시 깨짐)이 없다. | 전체 |\n| XMATCH | `=XMATCH(찾을값, 범위)` | MATCH의 개선판. 기본이 정확히 일치. | 2021 |\n| CHOOSECOLS | `=CHOOSECOLS(범위, 열번호1, 열번호2, …)` | 원하는 열만 골라서 보여준다. | 365 |\n| CHOOSEROWS | `=CHOOSEROWS(범위, 행번호1, …)` | 원하는 행만 골라서 보여준다. | 365 |\n\n**예시: 다른 파일의 가격을 가져오기**\n```\n=XLOOKUP(A2, '[아이템_기획.xlsx]Item'!$A:$A, '[아이템_기획.xlsx]Item'!$D:$D, \"없음\")\n```\n- A2의 아이템ID를 `아이템_기획.xlsx` 파일 Item 시트의 A열에서 찾고, 같은 행 D열(가격)을 가져온다.\n\n**예시: 한 번에 여러 열 가져오기**\n```\n=XLOOKUP(A2, Item!$A:$A, Item!$B:$E)\n```\n- B~E열 값이 오른쪽 셀로 함께 펼쳐진다. (365, 2021)\n\n---\n\n## 3. 걸러내기·정리\n\n| 함수 | 형식 | 설명 | 버전 |\n|---|---|---|---|\n| FILTER | `=FILTER(범위, 조건, [없을때])` | 조건에 맞는 행만 보여준다. 조건 여러 개는 `(조건1)*(조건2)`=AND, `(조건1)+(조건2)`=OR | 2021 |\n| UNIQUE | `=UNIQUE(범위)` | 중복을 뺀 목록 | 2021 |\n| SORT | `=SORT(범위, [기준열], [1오름/-1내림])` | 정렬한 결과를 보여준다. 원본은 그대로. | 2021 |\n| SORTBY | `=SORTBY(범위, 기준범위, [순서])` | 다른 열 기준으로 정렬 | 2021 |\n| VSTACK | `=VSTACK(범위1, 범위2)` | 표를 위아래로 합친다. | 365 |\n| HSTACK | `=HSTACK(범위1, 범위2)` | 표를 옆으로 붙인다. | 365 |\n| TAKE / DROP | `=TAKE(범위, 행수)` / `=DROP(범위, 행수)` | 앞에서 n행만 / n행 빼고 | 365 |\n\n**예시: 특정 NPC 등급이 \"보스\"인 행만 보기**\n```\n=FILTER(NPC!A2:H500, NPC!C2:C500=\"보스\", \"해당 없음\")\n```\n\n**예시: 두 파일의 표를 하나로 합쳐 보기**\n```\n=VSTACK('[데이터1.xlsx]Sheet1'!A2:F200, '[데이터2.xlsx]Sheet1'!A2:F200)\n```\n\n---\n\n## 4. 비교·검증 (기획 데이터 vs 실제 데이터)\n\n| 목적 | 수식 | 설명 |\n|---|---|---|\n| 두 값이 같은지 | `=A2=B2` | TRUE/FALSE |\n| 대소문자까지 같은지 | `=EXACT(A2, B2)` | |\n| 기획 값과 비교해 결과 표시 | `=IF(XLOOKUP(A2, 기획!A:A, 기획!D:D)=D2, \"일치\", \"불일치\")` | |\n| 한쪽에만 있는 키 | `=IF(COUNTIF(기획!A:A, A2)=0, \"기획에 없음\", \"\")` | |\n| 한쪽에만 있는 키 (구버전) | `=IF(ISNA(MATCH(A2, 기획!A:A, 0)), \"기획에 없음\", \"\")` | |\n| 확률 합계 확인 | `=SUMIFS(확률열, 상자ID열, \"AA\")` | 같은 상자의 확률 합산 |\n| 범위 안 값인지 | `=AND(D2>=최솟값, D2<=최댓값)` | |\n\n**조건부 서식으로 불일치 칠하기**\n1. 비교할 범위 선택 (예: D2:D500)\n2. 홈 → 조건부 서식 → 새 규칙 → \"수식을 사용하여 서식을 지정할 셀 결정\"\n3. 수식 입력: `=D2<>XLOOKUP($A2, 기획!$A:$A, 기획!$D:$D)`\n4. 채우기 색 지정\n\n---\n\n## 5. 개수·합계\n\n| 함수 | 형식 | 설명 | 버전 |\n|---|---|---|---|\n| COUNTIF / COUNTIFS | `=COUNTIFS(범위1, 조건1, 범위2, 조건2)` | 조건에 맞는 개수 | 전체 |\n| SUMIF / SUMIFS | `=SUMIFS(합계범위, 범위1, 조건1, …)` | 조건에 맞는 합계 | 전체 |\n| AVERAGEIFS | `=AVERAGEIFS(평균범위, 범위1, 조건1)` | 조건에 맞는 평균 | 전체 |\n| MAXIFS / MINIFS | `=MAXIFS(범위, 조건범위, 조건)` | 조건에 맞는 최대/최소 | 2019 |\n| COUNTA / COUNTBLANK | `=COUNTA(범위)` | 비어 있지 않은 칸 / 빈칸 개수 | 전체 |\n| SUMPRODUCT | `=SUMPRODUCT((조건1)*(조건2)*값범위)` | 복잡한 조건 합계 | 전체 |\n\n- 조건에 비교 기호를 쓸 때: `\">=10\"`, `\"<>\"&A2`, `\"*검*\"` (와일드카드)\n\n---\n\n## 6. 텍스트 다루기\n\n| 함수 | 형식 | 설명 | 버전 |\n|---|---|---|---|\n| TEXTSPLIT | `=TEXTSPLIT(텍스트, \"/\")` | 구분 기호로 나눠 여러 칸에 펼친다. | 365 |\n| TEXTBEFORE / TEXTAFTER | `=TEXTBEFORE(A2, \"_\")` | 구분 기호 앞 / 뒤 | 365 |\n| LEFT / RIGHT / MID | `=MID(A2, 시작, 글자수)` | 위치로 잘라내기 | 전체 |\n| FIND / SEARCH | `=SEARCH(\"검\", A2)` | 글자 위치. SEARCH는 대소문자 무시, 와일드카드 가능 | 전체 |\n| TEXTJOIN | `=TEXTJOIN(\", \", TRUE, 범위)` | 여러 칸을 구분 기호로 이어 붙인다. | 2019 |\n| TRIM / CLEAN | `=TRIM(A2)` | 앞뒤·중복 공백 / 보이지 않는 문자 제거 | 전체 |\n| SUBSTITUTE | `=SUBSTITUTE(A2, \"old\", \"new\")` | 글자 바꾸기 | 전체 |\n| VALUE / TEXT | `=VALUE(A2)` / `=TEXT(A2, \"0.00%\")` | 텍스트→숫자 / 숫자→형식 있는 텍스트 | 전체 |\n\n**예시: \"검/반지/목걸이\"에 \"반지\"가 들어 있는지**\n```\n=ISNUMBER(SEARCH(\"반지\", A2))\n```\n\n---\n\n## 7. 오류 처리·보조\n\n| 함수 | 형식 | 설명 |\n|---|---|---|\n| IFERROR | `=IFERROR(수식, \"없음\")` | 모든 오류를 지정 값으로 |\n| IFNA | `=IFNA(수식, \"없음\")` | #N/A만 처리 (다른 오류는 그대로 보여서 원인 찾기 쉬움) |\n| LET | `=LET(이름, 값, 계산식)` | 긴 수식에 이름을 붙여 짧게. 2021 |\n| HYPERLINK | `=HYPERLINK(\"[파일.xlsx]시트!A1\", \"열기\")` | 다른 파일·시트로 이동하는 링크 |\n| INDIRECT | `=INDIRECT(\"'\"&A1&\"'!B2\")` | 셀에 적힌 시트 이름으로 참조. 다른 파일은 그 파일이 열려 있어야 함 |\n\n**자주 나오는 오류**\n| 오류 | 흔한 원인 | 해결 |\n|---|---|---|\n| #N/A | 찾는 값이 없음, 숫자와 텍스트 형식이 다름, 앞뒤 공백 | TRIM, VALUE로 형식 맞추기, IFNA로 표시 |\n| #REF! | 참조한 열·시트·파일이 삭제되거나 이동됨 | 참조 다시 지정 |\n| #VALUE! | 형식 오류. 닫힌 파일을 SUMIF/COUNTIF/INDIRECT로 참조 | 원본 파일 열기, 또는 SUMPRODUCT/XLOOKUP 사용 |\n| #SPILL! | 결과가 펼쳐질 자리에 이미 값이 있음 | 아래·오른쪽 칸 비우기 |\n| #NAME? | 함수 이름 오타, 내 Excel 버전에 없는 함수 | 철자 확인, 구버전 대안 사용 |\n\n---\n\n## 8. 다른 파일 참조할 때 알아둘 점\n- 참조 형식: `'[파일명.xlsx]시트명'!$A:$A`\n- 처음 수식을 만들 때 두 파일을 모두 열어 두고, 수식 입력 중 다른 파일의 셀을 클릭하면 경로가 자동으로 들어간다.\n- 원본 파일이 닫혀 있어도 XLOOKUP, VLOOKUP, INDEX/MATCH는 마지막으로 저장된 값을 보여준다. **SUMIF, COUNTIF, INDIRECT, OFFSET은 원본이 닫히면 #VALUE! 오류**가 난다.\n- 원본 파일 이름이나 위치를 바꾸면 연결이 끊긴다. 데이터 → 링크 편집에서 다시 연결한다.\n- 매번 여러 파일을 합쳐야 하면 **데이터 → 데이터 가져오기 → 파일에서 → 통합 문서(파워 쿼리)**를 쓰는 편이 수식보다 가볍고 새로 고침 한 번으로 갱신된다.\n\n\n# 대량 데이터 확인 함수 모음\n\n아이템 100개 이상처럼 행이 많은 기획서와 데이터 문서를 확인할 때 QA에서 자주 쓰는 함수다. `/대량` 명령이나 대량 데이터 관련 요청에는 이 모음의 수식을 먼저 쓴다.\n\n예시 기준: 기획서 시트의 A열 Alias, B열 명칭, C~F열 속성 / '데이터' 시트의 A열 alias, C~F열 값\n\n버전 표기: **구버전 포함** / **Excel 2019 이상** / **Excel 2021 이상** / **Microsoft 365 · Excel 2024** / **Microsoft 365 전용**\n\n## 대량 데이터에서 느려지지 않게 쓰는 법\n- FILTER, UNIQUE, XLOOKUP 배열 수식의 범위는 열 전체(A:A) 대신 실제 행 수(A2:A5000)로 잡는다. 열 전체를 배열로 넘기면 100만 행을 계산한다.\n- 같은 XLOOKUP을 여러 번 쓰는 수식은 LET으로 이름을 붙여 한 번만 계산한다.\n- 판정이 끝난 열은 복사 → 값으로 붙여넣기 해 두면 파일이 가벼워진다.\n- 수식이 많아 느리면 수식 → 계산 옵션 → 수동으로 바꾸고, 볼 때 F9로 계산한다.\n- 수만 행 이상이거나 매 빌드 반복하는 비교는 파워 쿼리나 데이터 비교 도구가 더 빠르다.\n- COUNTIF, SUMIF, INDIRECT는 참조한 다른 파일이 닫혀 있으면 #VALUE!가 난다. 비교할 시트를 같은 파일로 복사해 두고 쓴다.\n\n## 값 가져오기\n다른 시트·파일에서 같은 Alias의 값을 가져올 때\n\n| 함수 | 쓰는 경우 | 수식 | 버전 | 참고 |\n|---|---|---|---|---|\n| XLOOKUP | Alias로 데이터 문서의 값을 가져올 때 | `=XLOOKUP(A2, 데이터!$A:$A, 데이터!$D:$D, \"없음\")` | Excel 2021 이상 | 없는 Alias는 \"없음\"으로 나온다. 왼쪽 열도 가져올 수 있다. |\n| XLOOKUP (여러 열 한 번에) | 한 Alias의 속성 여러 개를 한 수식으로 가져올 때 | `=XLOOKUP(A2, 데이터!$A:$A, 데이터!$C:$F, \"없음\")` | Excel 2021 이상 | C~F열 값이 오른쪽으로 함께 펼쳐진다. 표(Ctrl+T) 안에서는 펼쳐지지 않으니 일반 범위에서 쓴다. |\n| INDEX + MATCH | XLOOKUP이 없는 Excel에서 값을 가져올 때 | `=INDEX(데이터!$D:$D, MATCH(A2, 데이터!$A:$A, 0))` | 구버전 포함 | 없는 값은 #N/A가 나온다. IFERROR(수식, \"없음\")으로 감싼다. |\n| XLOOKUP (기준 열 2개) | 상품 ID + 구성품 Alias처럼 두 열이 같아야 같은 행일 때 | `=XLOOKUP(A2&\"\\|\"&C2, 데이터!$A$2:$A$5000&\"\\|\"&데이터!$C$2:$C$5000, 데이터!$E$2:$E$5000, \"없음\")` | Excel 2021 이상 | 범위는 열 전체(A:A)가 아니라 실제 행 수만큼만 잡는다. 열 전체를 쓰면 매우 느려진다. |\n| VLOOKUP | 구버전에서 가장 익숙한 방법으로 값을 가져올 때 | `=VLOOKUP(A2, 데이터!$A:$F, 4, FALSE)` | 구버전 포함 | 마지막 인수는 반드시 FALSE. 찾는 열이 범위의 첫 열이어야 하고, 열을 끼워 넣으면 번호가 어긋난다. |\n\n## 값 비교\n기획 값과 데이터 값이 같은지 판정할 때\n\n| 함수 | 쓰는 경우 | 수식 | 버전 | 참고 |\n|---|---|---|---|---|\n| IF + XLOOKUP | 기획 값과 데이터 값이 같은지 Pass/Fail로 표시할 때 | `=IF(XLOOKUP(A2, 데이터!$A:$A, 데이터!$D:$D, \"없음\")=D2, \"Pass\", \"Fail\")` | Excel 2021 이상 | = 비교는 영문 대소문자를 구분하지 않는다. 데이터에 없는 Alias도 Fail이 된다. |\n| 가능/불가 ↔ Y/N 비교 | 기획서는 가능/불가, 데이터 문서는 Y/N(소문자 포함)일 때 | `=IF(IF(D2=\"가능\",\"Y\",\"N\")=UPPER(TRIM(XLOOKUP(A2, 데이터!$A:$A, 데이터!$D:$D, \"\"))), \"Pass\", \"Fail\")` | Excel 2021 이상 | UPPER로 소문자 y/n을, TRIM으로 앞뒤 공백을 맞춘다. |\n| 확률·수치 비교 (오차 허용) | 0.5%와 0.005처럼 숫자 값을 비교할 때 | `=IF(ABS(XLOOKUP(A2, 데이터!$A:$A, 데이터!$C:$C, 0)-D2)<=0.000001, \"Pass\", \"Fail\")` | Excel 2021 이상 | 기획 값이 \"0.5%\" 텍스트면 D2 대신 VALUE(D2)를 쓴다. 소수 계산 오차 때문에 = 대신 차이의 크기로 비교한다. |\n| 다른 열 이름 나열 | 아이템마다 어느 속성이 다른지 한 칸에 보고 싶을 때 | `=IFERROR(TEXTJOIN(\", \", TRUE, IF(C2:F2<>XLOOKUP(A2, 데이터!$A:$A, 데이터!$C:$F), $C$1:$F$1, \"\")), \"데이터 없음\")` | Excel 2021 이상 | 빈칸이면 모두 일치. \"판매 여부, 거래 여부\"처럼 다른 열의 헤더가 나온다. |\n| EXACT + SUMPRODUCT | 영문 대소문자까지 정확히 같은 Alias가 있는지 볼 때 | `=IF(SUMPRODUCT(--EXACT(A2, 데이터!$A$2:$A$5000))>0, \"\", \"대소문자 다름 또는 없음\")` | 구버전 포함 | = 비교와 XLOOKUP은 item_01과 ITEM_01을 같다고 본다. 대소문자가 중요한 키는 EXACT로 확인한다. |\n| SUMPRODUCT (불일치 칸 수) | 행 순서와 크기가 같은 두 표에서 다른 칸이 몇 개인지 셀 때 | `=SUMPRODUCT(--(기획!C2:F200<>데이터!C2:F200))` | 구버전 포함 | 두 표의 행 순서가 같을 때만 쓴다. 순서가 다르면 XLOOKUP 비교를 쓴다. |\n| BYROW + LAMBDA | 행 순서가 같은 두 표를 행마다 한 번에 판정할 때 | `=BYROW(기획!C2:F200=데이터!C2:F200, LAMBDA(r, IF(AND(r), \"Pass\", \"Fail\")))` | Microsoft 365 · Excel 2024 | 수식 하나로 200행 결과가 아래로 펼쳐진다. |\n\n## 누락·중복\n한쪽에만 있는 행, 중복된 키, 빈칸을 찾을 때\n\n| 함수 | 쓰는 경우 | 수식 | 버전 | 참고 |\n|---|---|---|---|---|\n| COUNTIF (없는 값 표시) | 기획서 아이템이 데이터 문서에 있는지 표시할 때 | `=IF(COUNTIF(데이터!$A:$A, A2)=0, \"데이터에 없음\", \"\")` | 구버전 포함 | 방향을 바꿔 데이터 시트에도 넣으면 기획서에 없는 아이템을 찾는다. 참조한 파일이 닫혀 있으면 #VALUE!가 난다. |\n| FILTER + COUNTIF (누락 목록) | 한쪽에만 있는 Alias를 목록으로 뽑을 때 | `=FILTER(A2:A200, COUNTIF(데이터!$A$2:$A$5000, A2:A200)=0, \"없음\")` | Excel 2021 이상 | 누락된 Alias만 아래로 나열된다. 이슈에 그대로 붙여넣기 좋다. |\n| COUNTIF (중복 표시) | Alias가 두 번 이상 들어갔는지 표시할 때 | `=IF(COUNTIF($A:$A, A2)>1, \"중복\", \"\")` | 구버전 포함 |  |\n| LET + UNIQUE + FILTER (중복 목록) | 중복된 값만 한 번씩 뽑아 볼 때 | `=LET(u, UNIQUE(A2:A200), FILTER(u, COUNTIF(A2:A200, u)>1, \"중복 없음\"))` | Excel 2021 이상 |  |\n| COUNTA − UNIQUE (개수 대조) | 행 수와 고유 값 수가 같은지 한 칸으로 확인할 때 | `=COUNTA(A2:A5000)-ROWS(UNIQUE(FILTER(A2:A5000, A2:A5000<>\"\")))` | Excel 2021 이상 | 0이면 중복 없음. 기획서 아이템 수와 데이터 문서 아이템 수를 먼저 맞춰 볼 때도 COUNTA를 쓴다. |\n| COUNTBLANK | 속성 칸에 빈칸이 있는 행을 찾을 때 | `=IF(COUNTBLANK(C2:F2)>0, \"빈칸 있음\", \"\")` | 구버전 포함 |  |\n\n## 개수·합계\n조건별 개수, 확률 합계, 범위를 확인할 때\n\n| 함수 | 쓰는 경우 | 수식 | 버전 | 참고 |\n|---|---|---|---|---|\n| COUNTIFS | 조건에 맞는 아이템이 몇 개인지 셀 때 | `=COUNTIFS($C:$C, \"전설\", $G:$G, \"불가\")` | 구버전 포함 | 와일드카드도 된다: =COUNTIFS($A:$A, \"ITEM_CR_*\"). 비교 기호는 \">=10\", \"<>\"&A2처럼 쓴다. |\n| SUMIFS (확률 합계 100%) | 드랍 그룹·상자별 확률 합이 100%인지 확인할 때 | `=IF(ABS(SUMIFS($D:$D, $A:$A, A2)-1)<0.000001, \"OK\", \"합계 \"&TEXT(SUMIFS($D:$D, $A:$A, A2), \"0.00%\"))` | 구버전 포함 | A열이 그룹, D열이 확률. 합이 100%가 아니면 실제 합계를 보여준다. |\n| MAXIFS / MINIFS | 등급별 최댓값·최솟값이 기획 범위 안인지 볼 때 | `=MAXIFS($E:$E, $C:$C, \"전설\")` | Excel 2019 이상 | 구버전 대안: =MAX(IF($C$2:$C$200=\"전설\", $E$2:$E$200)) 입력 후 Ctrl+Shift+Enter. |\n| COUNTIFS (범위 밖 값) | 기획 범위(AA~BB)를 벗어난 값이 몇 개인지 셀 때 | `=COUNTIFS($E:$E, \"<\"&$J$1)+COUNTIFS($E:$E, \">\"&$J$2)` | 구버전 포함 | J1에 최솟값, J2에 최댓값을 적는다. 0이면 모두 범위 안. |\n| GROUPBY | 속성 조합별로 아이템이 몇 개인지 표로 볼 때 | `=GROUPBY(C2:F200, A2:A200, COUNTA)` | Microsoft 365 전용 | Microsoft 365 전용. 아이템이 1~2개뿐인 드문 조합은 기획 실수일 수 있어 먼저 확인한다. 대안은 아래 UNIQUE + COUNTIFS. |\n| UNIQUE + COUNTIFS (조합별 개수) | GROUPBY 없이 속성 조합별 개수를 볼 때 | `=UNIQUE(C2:F200)` | Excel 2021 이상 | H2에 넣으면 조합이 펼쳐진다. L2에 =COUNTIFS($C$2:$C$200, H2, $D$2:$D$200, I2, $E$2:$E$200, J2, $F$2:$F$200, K2)를 넣고 아래로 채운다. |\n\n## 걸러 보기\n조건에 맞는 행만 따로 모아 볼 때\n\n| 함수 | 쓰는 경우 | 수식 | 버전 | 참고 |\n|---|---|---|---|---|\n| FILTER (조건 행만) | 조건에 맞는 아이템만 따로 모아 볼 때 | `=FILTER(A2:F200, (C2:C200=\"전설\")*(F2:F200=\"불가\"), \"없음\")` | Excel 2021 이상 | *는 AND, +는 OR. 원본은 그대로 두고 결과만 다른 곳에 펼쳐진다. |\n| FILTER (Fail만 모으기) | 판정 결과가 Fail인 행만 모아 이슈에 붙일 때 | `=FILTER(A2:H200, H2:H200=\"Fail\", \"Fail 없음\")` | Excel 2021 이상 |  |\n| FILTER + SEARCH (포함 검색) | 이름에 특정 단어가 들어간 아이템만 볼 때 | `=FILTER(A2:F200, ISNUMBER(SEARCH(\"천랑\", B2:B200)), \"없음\")` | Excel 2021 이상 | SEARCH는 대소문자를 구분하지 않는다. |\n| SORTBY | 등급 → 수치처럼 여러 기준으로 정렬해 볼 때 | `=SORTBY(A2:F200, C2:C200, 1, E2:E200, -1)` | Excel 2021 이상 | 1은 오름차순, -1은 내림차순. 원본 순서는 바뀌지 않는다. |\n| CHOOSECOLS | 결과에서 필요한 열만 골라 볼 때 | `=CHOOSECOLS(FILTER(A2:H200, H2:H200=\"Fail\"), 1, 2, 8)` | Microsoft 365 · Excel 2024 | 1·2·8번째 열(Alias, 명칭, 결과)만 보여준다. |\n\n## 값 정리\n공백, 대소문자, 숫자 형식 때문에 비교가 어긋날 때\n\n| 함수 | 쓰는 경우 | 수식 | 버전 | 참고 |\n|---|---|---|---|---|\n| TRIM + CLEAN | 눈에 안 보이는 공백 때문에 같은 값이 다르다고 나올 때 | `=TRIM(CLEAN(SUBSTITUTE(A2, CHAR(160), \" \")))` | 구버전 포함 | 공백이 있는지 검사: =LEN(A2)<>LEN(TRIM(A2)) 가 TRUE면 앞뒤나 중간에 남는 공백이 있다. |\n| VALUE / ISNUMBER | 숫자가 텍스트로 들어가 비교가 어긋날 때 | `=VALUE(D2)` | 구버전 포함 | =ISNUMBER(D2)가 FALSE면 텍스트다. VALUE는 \"1,000\"과 \"0.5%\"도 숫자로 바꾼다. |\n| UPPER / LOWER | Y/N, Alias의 대소문자를 통일할 때 | `=UPPER(TRIM(D2))` | 구버전 포함 |  |\n| TEXTSPLIT | \"검/반지/목걸이\"처럼 한 칸에 든 값을 나눌 때 | `=TEXTSPLIT(A2, \"/\")` | Microsoft 365 · Excel 2024 | 구버전 대안: 데이터 → 텍스트 나누기. |\n| TEXTBEFORE / TEXTAFTER | Alias에서 종류나 번호 부분만 꺼낼 때 | `=TEXTAFTER(A2, \"_\", -1)` | Microsoft 365 · Excel 2024 | ITEM_CR_WPN_01에서 01을 꺼낸다. -1은 마지막 구분자 기준. 구버전은 LEFT / MID / FIND를 쓴다. |\n| AND + LEFT + LEN + EXACT (형식 검사) | Alias가 정해진 형식인지 한 번에 검사할 때 | `=AND(LEFT(A2,5)=\"ITEM_\", LEN(A2)=14, EXACT(A2, UPPER(A2)))` | 구버전 포함 | 접두어, 글자 수, 대문자 여부를 함께 본다. 조건은 프로젝트 규칙에 맞게 바꾼다. |\n\n## 합치기\n여러 시트나 열을 하나로 모을 때\n\n| 함수 | 쓰는 경우 | 수식 | 버전 | 참고 |\n|---|---|---|---|---|\n| VSTACK | 무기·방어구·장신구처럼 나뉜 시트를 한 표로 모을 때 | `=LET(v, VSTACK(무기!A2:F100, 방어구!A2:F100, 장신구!A2:F100), FILTER(v, CHOOSECOLS(v, 1)<>\"\"))` | Microsoft 365 · Excel 2024 | FILTER로 빈 행을 뺀다. 시트가 나란히 있으면 VSTACK(무기:장신구!A2:F100)처럼 한 번에 쓸 수 있다. |\n| HSTACK + XLOOKUP | 기획 값 옆에 데이터 값을 나란히 붙여 볼 때 | `=HSTACK(A2:B200, XLOOKUP(A2:A200, 데이터!$A$2:$A$5000, 데이터!$D$2:$D$5000, \"없음\"))` | Microsoft 365 · Excel 2024 | Alias, 명칭, 데이터 값이 한 표로 펼쳐진다. |\n| TOCOL | 여러 열에 흩어진 Alias를 한 열로 모을 때 | `=TOCOL(B2:F50, 1)` | Microsoft 365 · Excel 2024 | 두 번째 인수 1은 빈칸을 뺀다. 구성품 1~5 열에 든 Alias를 모아 UNIQUE로 목록을 만들 때 쓴다. |\n| INDIRECT (시트별 행 수) | 시트 이름 목록으로 시트마다 행 수를 한눈에 볼 때 | `=COUNTA(INDIRECT(\"'\"&A2&\"'!A:A\"))-1` | 구버전 포함 | A2에 시트 이름. 다른 파일을 참조할 때는 그 파일이 열려 있어야 한다. |\n\n## 엑셀 기능\n수식 대신 쓰면 빠른 엑셀 기능\n\n| 함수 | 쓰는 경우 | 수식 | 버전 | 참고 |\n|---|---|---|---|---|\n| 조건부 서식 (불일치 칠하기) | 다른 값을 색으로 바로 보고 싶을 때 | `=D2<>XLOOKUP($A2, 데이터!$A:$A, 데이터!$D:$D, \"\")` | Excel 2021 이상 | 범위 선택 → 홈 → 조건부 서식 → 새 규칙 → \"수식을 사용하여 서식을 지정할 셀 결정\"에 이 수식을 넣는다. |\n| 조건부 서식 (중복 값) | 수식 없이 중복된 Alias를 색으로 볼 때 | `홈 → 조건부 서식 → 셀 강조 규칙 → 중복 값` | 구버전 포함 |  |\n| 표로 만들기 (Ctrl+T) | 행이 늘어도 수식 범위가 자동으로 따라오게 할 때 | `=COUNTIFS(표1[등급], \"전설\")` | 구버전 포함 | 표 안에서는 열 이름으로 참조한다. 필터와 정렬 버튼이 자동으로 붙는다. FILTER처럼 펼쳐지는 수식은 표 밖에 쓴다. |\n| 피벗 테이블 | 등급·종류·속성별 개수를 끌어다 놓기로 볼 때 | `삽입 → 피벗 테이블 → 행에 등급·속성, 값에 Alias(개수)` | 구버전 포함 | 수식 없이 조합별 개수를 본다. 원본이 바뀌면 새로 고침을 누른다. |\n| 파워 쿼리 (쿼리 병합) | 수만 행이거나 매 빌드마다 같은 비교를 반복할 때 | `데이터 → 데이터 가져오기 → 쿼리 결합 → 병합 → 조인 종류: 왼쪽 앤티(첫 번째에만 있는 행)` | 구버전 포함 | 수식보다 가볍고, 파일만 바꾼 뒤 새로 고침 한 번으로 다시 비교된다. |\n| 이동 옵션 (빈 셀 선택) | 수백 행에서 빈칸만 한 번에 골라낼 때 | `범위 선택 → Ctrl+G → 옵션 → 빈 셀` | 구버전 포함 | 선택된 빈칸에 색을 칠하거나 값을 한 번에 넣을 수 있다(입력 후 Ctrl+Enter). |\n"}]</script>
+<script>
+(function(){
+  var AGENTS = JSON.parse(document.getElementById('agents-data').textContent);
+  var byId = {}; AGENTS.forEach(function(a){ byId[a.id] = a; });
+  var $ = function(id){ return document.getElementById(id); };
+  var HKEY = 'qa-agents-history-v1';
+  var histories = {};
+  try { histories = JSON.parse(localStorage.getItem(HKEY) || '{}') || {}; } catch(e){ histories = {}; }
+  function saveHist(){ try { localStorage.setItem(HKEY, JSON.stringify(histories)); } catch(e){} }
+
+  var sample = null, sampleReady = false;
+  var current = null, ctl = null, busy = false;
+
+  /* ---------- home + left nav ---------- */
+  var ICON = {
+    jira: '<path d="M8 6V4h8v2"/><rect x="5" y="6" width="14" height="14" rx="3"/><path d="M5 11h14M12 11v9M2 9h3M19 9h3M2 16h3M19 16h3"/>',
+    tc: '<rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 8l1.5 1.5L12 7M8 14l1.5 1.5L12 13M14 8h3M14 14h3"/>',
+    comm: '<path d="M21 12a8 8 0 0 1-11.5 7.2L4 21l1.8-5.5A8 8 0 1 1 21 12z"/><path d="M9 11h6M9 14h4"/>',
+    jql: '<circle cx="10.5" cy="10.5" r="6.5"/><path d="M15.5 15.5L21 21M8 10.5h5M10.5 8v5"/>',
+    excel: '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18M3 14h18M9 4v16M15 4v16"/>',
+    compare: '<rect x="3" y="4" width="7" height="16" rx="1.5"/><rect x="14" y="4" width="7" height="16" rx="1.5"/><path d="M10 9h4M12 7l2 2-2 2M14 15h-4M12 13l-2 2 2 2"/>'
+  };
+  function icon(id){ return '<svg class="ico" viewBox="0 0 24 24" aria-hidden="true">' + (ICON[id] || '') + '</svg>'; }
+  // 처음 보는 사람 기준: "에이전트 이름"보다 "하고 싶은 일"을 먼저 보여준다
+  var TASK = {
+    jira: ['버그·이슈 정리', '현상을 적으면 JIRA에 붙여넣을 버그 리포트로 정리합니다. 수정 확인 코멘트와 주간 보고도 됩니다.'],
+    tc: ['TC·체크리스트 작성', '기획서를 주면 팀 표준 양식(TestCase · Checklist · Data)으로 테스트 케이스를 만듭니다.'],
+    comm: ['메일·메시지 다듬기', '맞춤법을 고치고, 팀장님 보고 메일이나 회의록을 정리합니다.'],
+    jql: ['JIRA 검색 쿼리 만들기', '찾고 싶은 이슈 조건을 말하면 JQL을 만들어 줍니다. 팀에서 자주 쓰는 쿼리도 저장돼 있습니다.'],
+    excel: ['엑셀 수식 찾기', '하고 싶은 일을 말하면 맞는 함수와 바로 쓸 수식을 알려 줍니다. 대량 데이터 함수 모음도 있습니다.'],
+    compare: ['기획서 ↔ 데이터 문서 비교', '엑셀 파일 두 개를 올리면 값이 다른 칸과 빠진 행을 찾아 줍니다. Claude를 쓰지 않아 바로 결과가 나옵니다.']
+  };
+  function exLabel(x){ var m = x.match(/^\/\S+/); return m ? m[0] : ''; }
+  function exBody(x){ return x.replace(/^\/\S+\s*/, ''); }
+  function startWith(id, text){ location.hash = id; showAgent(id); $('q').value = text; $('q').focus(); }
+  var picker = $('picker');
+  function makeCard(id, name, examples, open){
+    var c = document.createElement('article'); c.className = 'card'; c.id = 'pick-' + id;
+    var o = document.createElement('button'); o.type = 'button'; o.className = 'card-open';
+    o.innerHTML = '<span class="card-ico">' + icon(id) + '</span><span class="card-t"><b></b><small></small></span>';
+    o.querySelector('b').textContent = TASK[id][0]; o.querySelector('small').textContent = name;
+    o.addEventListener('click', open); c.appendChild(o);
+    var d = document.createElement('p'); d.className = 'card-d'; d.textContent = TASK[id][1]; c.appendChild(d);
+    if (examples.length) {
+      var ex = document.createElement('div'); ex.className = 'card-ex';
+      examples.slice(0, 2).forEach(function(x){
+        var e = document.createElement('button'); e.type = 'button'; e.className = 'chip-ex'; e.textContent = '예: ' + exBody(x); e.title = x;
+        e.addEventListener('click', function(){ startWith(id, x); });
+        ex.appendChild(e);
+      });
+      c.appendChild(ex);
+    }
+    var g = document.createElement('button'); g.type = 'button'; g.className = 'card-go'; g.textContent = id === 'compare' ? '도구 열기 →' : '시작하기 →';
+    g.addEventListener('click', open); c.appendChild(g);
+    picker.appendChild(c);
+  }
+  function makeTab(id, name, nav){
+    var t = document.createElement('button');
+    t.type = 'button'; t.className = 'tab'; t.id = 'tab-' + id; t.dataset.id = id;
+    t.innerHTML = icon(id) + '<span></span>'; t.querySelector('span').textContent = name;
+    t.addEventListener('click', function(){ location.hash = id; });
+    nav.appendChild(t);
+  }
+  AGENTS.forEach(function(a){
+    makeCard(a.id, a.name, a.examples || [], function(){ location.hash = a.id; });
+    makeTab(a.id, a.name, $('tabs'));
+  });
+  makeCard('compare', '데이터 비교 도구', [], function(){ location.hash = 'compare'; });
+  makeTab('compare', '데이터 비교', $('tools-nav'));
+  $('c-icon').innerHTML = icon('compare');
+  $('back').addEventListener('click', function(){ location.hash = ''; showHome(); });
+
+  /* ---------- routing ---------- */
+  function route(){
+    var id = (location.hash || '').replace('#','');
+    if (byId[id]) showAgent(id); else if (id === 'compare') showCompare(); else showHome();
+  }
+  function markTab(id){
+    if (id === 'home') $('back').setAttribute('aria-current', 'page'); else $('back').removeAttribute('aria-current');
+    document.querySelectorAll('.tab').forEach(function(t){
+      if (t.dataset.id === id) t.setAttribute('aria-current','page'); else t.removeAttribute('aria-current');
+    });
+  }
+  function showHome(){
+    if (ctl) ctl.abort();
+    current = null;
+    $('home').hidden = false; $('agent').hidden = true; $('compare').hidden = true; $('topbar').hidden = true; placeProjectBox('home');
+    document.title = 'QA 업무 에이전트';
+    markTab('home'); window.scrollTo(0,0);
+  }
+  function showCompare(){
+    if (ctl) ctl.abort();
+    current = null;
+    $('home').hidden = true; $('agent').hidden = true; $('compare').hidden = false; $('topbar').hidden = false; placeProjectBox('other');
+    markTab('compare');
+    window.scrollTo(0,0);
+  }
+  function showAgent(id){
+    if (current && current !== id && ctl) ctl.abort();
+    current = id;
+    var a = byId[id];
+    $('home').hidden = true; $('agent').hidden = false; $('compare').hidden = true; $('topbar').hidden = false; placeProjectBox('other');
+    $('a-icon').innerHTML = icon(id); $('a-name').textContent = a.name; $('a-role').textContent = a.role;
+    markTab(id);
+    var cl = $('a-cmds'); cl.innerHTML = '';
+    a.cmds.forEach(function(c){
+      var b = document.createElement('button'); b.type = 'button'; b.className = 'cmd';
+      b.innerHTML = '<code></code><span></span>';
+      b.querySelector('code').textContent = c[0]; b.querySelector('span').textContent = c[1];
+      b.addEventListener('click', function(){ insertCmd(c[0]); });
+      cl.appendChild(b);
+    });
+    var fl = $('a-files'); fl.innerHTML = '';
+    a.files.forEach(function(f){ var s = document.createElement('span'); s.className = 'file'; s.textContent = f; fl.appendChild(s); });
+    renderLibButtons(a);
+    $('a-guard').textContent = '이 화면은 ' + a.name + ' 업무만 답합니다. 범위 밖 요청은 알맞은 에이전트를 안내합니다.';
+    $('q').placeholder = (TASK[id] ? TASK[id][0] : a.name) + ' — 하고 싶은 일을 그대로 적어 주세요. 위 명령어를 눌러도 됩니다.';
+    var ab = document.querySelector('.about'); if (ab) ab.open = false;
+    renderLog();
+    window.scrollTo(0,0);
+  }
+  window.addEventListener('hashchange', route);
+
+  function insertCmd(cmd){
+    var q = $('q'); var v = q.value.replace(/^\/\S+\s*/, '');
+    q.value = cmd + ' ' + v; q.focus(); q.setSelectionRange(q.value.length, q.value.length);
+  }
+
+  /* ---------- markdown ---------- */
+  function renderMd(el, text){
+    if (window.marked && window.DOMPurify) {
+      el.innerHTML = DOMPurify.sanitize(marked.parse(text, {gfm:true, breaks:true}));
+      el.querySelectorAll('table').forEach(function(t){
+        if (t.parentNode.classList.contains('tscroll')) return;
+        var w = document.createElement('div'); w.className = 'tscroll'; t.parentNode.insertBefore(w, t); w.appendChild(t);
+      });
+      el.querySelectorAll('table').forEach(mergeCats);
+      el.querySelectorAll('pre').forEach(function(p){
+        var b = document.createElement('button'); b.type = 'button'; b.className = 'cpy'; b.textContent = '복사';
+        b.addEventListener('click', function(){ copyText(p.querySelector('code') || p, b); });
+        p.appendChild(b);
+      });
+    } else {
+      el.style.whiteSpace = 'pre-wrap'; el.textContent = text;
+    }
+  }
+  // TC·CL·Data 표: 대분류·중분류는 위 행과 같거나 비어 있으면 병합, 소분류는 그대로
+  function mergeCats(table){
+    var ths = Array.prototype.slice.call(table.querySelectorAll('thead th'));
+    function find(re){ for (var i = 0; i < ths.length; i++) if (re.test(ths[i].textContent.trim())) return i; return -1; }
+    var c1 = find(/^(category\s*1|대분류)/i), c2 = find(/^(category\s*2|중분류)/i);
+    if (c1 < 0) return;
+    var rows = Array.prototype.slice.call(table.querySelectorAll('tbody tr')).map(function(tr){ return Array.prototype.slice.call(tr.children); });
+    if (!rows.length || rows.some(function(r){ return r.length !== ths.length; })) return;
+    function txt(i, c){ return rows[i][c].textContent.trim(); }
+    function groups(c, isBreak){
+      var out = [], start = 0, val = txt(0, c);
+      for (var i = 1; i <= rows.length; i++) {
+        var brk = i === rows.length || isBreak(i) || (txt(i, c) !== '' && txt(i, c) !== val);
+        if (brk) { out.push([start, i - 1]); start = i; if (i < rows.length) val = txt(i, c); }
+      }
+      return out;
+    }
+    var g1 = groups(c1, function(){ return false; });
+    var starts = {}; g1.forEach(function(g){ starts[g[0]] = 1; });
+    var g2 = c2 >= 0 ? groups(c2, function(i){ return !!starts[i]; }) : [];
+    function apply(gs, c){
+      gs.forEach(function(g){
+        if (g[1] === g[0]) return;
+        var top = rows[g[0]][c]; top.rowSpan = g[1] - g[0] + 1; top.classList.add('merged');
+        for (var i = g[0] + 1; i <= g[1]; i++) rows[i][c].remove();
+      });
+    }
+    apply(g2, c2); apply(g1, c1);
+  }
+  function copyText(node, btn){
+    var text = node.textContent;
+    function done(m){ btn.textContent = m; setTimeout(function(){ btn.textContent = '복사'; }, 1500); }
+    function fallback(){ var r = document.createRange(); r.selectNodeContents(node); var s = getSelection(); s.removeAllRanges(); s.addRange(r); done('선택됨'); }
+    try { navigator.clipboard.writeText(text).then(function(){ done('복사됨'); }, fallback); } catch(e){ fallback(); }
+  }
+
+  /* ---------- log ---------- */
+  function renderLog(){
+    var a = byId[current]; var log = $('log'); log.innerHTML = '';
+    var turns = histories[current] || [];
+    if (!turns.length) {
+      var e = document.createElement('div'); e.className = 'empty';
+      e.innerHTML = '<span class="card-ico">' + icon(a.id) + '</span><h3></h3><p></p><div class="starters"></div>';
+      e.querySelector('h3').textContent = (TASK[a.id] ? TASK[a.id][0] : a.name) + ', 무엇부터 할까요?';
+      e.querySelector('p').textContent = a.examples.length ? '아래 예시를 누르면 입력창에 채워집니다. 내용을 바꿔서 보내거나, 하고 싶은 일을 그대로 적어도 됩니다.' : '하고 싶은 일을 그대로 적거나, 입력창 위 명령어 버튼을 눌러 시작하세요.';
+      var st = e.querySelector('.starters');
+      a.examples.forEach(function(x){
+        var b = document.createElement('button'); b.type = 'button'; b.className = 'ex';
+        b.innerHTML = '<small></small><span></span>'; b.querySelector('small').textContent = exLabel(x) || '예시'; b.querySelector('span').textContent = exBody(x);
+        b.addEventListener('click', function(){ $('q').value = x; $('q').focus(); });
+        st.appendChild(b);
+      });
+      (a.libs || []).forEach(function(l){
+        var lb = document.createElement('button'); lb.type = 'button'; lb.className = 'ex lib-ex';
+        lb.innerHTML = '<small>바로 보기</small><span></span>'; lb.querySelector('span').textContent = l.button + ' (' + l.items.length + '개)';
+        lb.addEventListener('click', function(){ openLib(a.id, l.id); });
+        st.appendChild(lb);
+      });
+      log.appendChild(e);
+      showLib(false);
+      return;
+    }
+    turns.forEach(function(t){ addMsg(t.role, t.content); });
+    showLib(false);
+  }
+
+  /* ---------- collections shown inside the thread ---------- */
+  var libOpen = {}, libGroup = 'all', libQuery = '';
+  function libOf(a, id){ return (a.libs || []).filter(function(l){ return l.id === id; })[0]; }
+  function renderLibButtons(a){
+    var box = $('a-libs'); box.innerHTML = '';
+    $('a-libs-wrap').hidden = !(a.libs && a.libs.length);
+    (a.libs || []).forEach(function(l){
+      var b = document.createElement('button'); b.type = 'button'; b.className = 'lib-btn'; b.id = 'libbtn-' + l.id;
+      b.textContent = l.button; b.setAttribute('aria-expanded', libOpen[a.id] === l.id ? 'true' : 'false');
+      b.addEventListener('click', function(){ if (libOpen[a.id] === l.id) closeLib(a.id); else openLib(a.id, l.id); });
+      box.appendChild(b);
+    });
+  }
+  function openLib(aid, lid){ libOpen[aid] = lid; libGroup = 'all'; libQuery = ''; renderLibButtons(byId[aid]); showLib(true); }
+  function closeLib(aid){ delete libOpen[aid]; var el = $('lib-panel'); if (el) el.remove(); renderLibButtons(byId[aid]); }
+  function showLib(scroll){
+    var old = $('lib-panel'); if (old) old.remove();
+    var a = byId[current]; if (!a || !libOpen[a.id]) return;
+    var lib = libOf(a, libOpen[a.id]); if (!lib) return;
+    var el = document.createElement('section'); el.className = 'lib'; el.id = 'lib-panel';
+    var head = document.createElement('div'); head.className = 'lib-head';
+    head.innerHTML = '<div><h3></h3><p></p></div><button type="button" class="mini" id="lib-close">접기</button>';
+    head.querySelector('h3').textContent = lib.title + ' (' + lib.items.length + '개)'; head.querySelector('p').textContent = lib.intro;
+    head.querySelector('button').addEventListener('click', function(){ closeLib(a.id); });
+    el.appendChild(head);
+    if (lib.assume) { var as = document.createElement('p'); as.className = 'lib-assume'; as.textContent = lib.assume; el.appendChild(as); }
+    if (lib.tips && lib.tips.length) {
+      var tips = document.createElement('details'); tips.className = 'lib-tips';
+      tips.innerHTML = '<summary></summary><ul></ul>'; tips.querySelector('summary').textContent = lib.tipsTitle || '쓸 때 알아둘 점';
+      lib.tips.forEach(function(t){ var li = document.createElement('li'); li.textContent = t; tips.querySelector('ul').appendChild(li); });
+      el.appendChild(tips);
+    }
+    var tools = document.createElement('div'); tools.className = 'lib-tools';
+    var chips = document.createElement('div'); chips.className = 'filters'; chips.setAttribute('role', 'tablist');
+    var search = document.createElement('input'); search.type = 'search'; search.id = 'lib-q'; search.placeholder = lib.searchHint || '함수 이름이나 상황으로 찾기'; search.value = libQuery; search.setAttribute('aria-label', lib.title + '에서 찾기');
+    tools.appendChild(chips); tools.appendChild(search); el.appendChild(tools);
+    var hint = document.createElement('p'); hint.className = 'lib-hint'; el.appendChild(hint);
+    var list = document.createElement('div'); list.className = 'lib-list' + (lib.wide ? ' wide' : ''); el.appendChild(list);
+    function draw(){
+      chips.innerHTML = '';
+      (lib.groups.length > 1 ? [{ id: 'all', title: '전체' }].concat(lib.groups) : []).forEach(function(g){
+        var n = g.id === 'all' ? lib.items.length : lib.items.filter(function(i){ return i.group === g.id; }).length;
+        var c = document.createElement('button'); c.type = 'button'; c.className = 'flt'; c.setAttribute('role', 'tab');
+        c.textContent = g.title + ' ' + n; c.setAttribute('aria-selected', libGroup === g.id ? 'true' : 'false');
+        c.addEventListener('click', function(){ libGroup = g.id; draw(); });
+        chips.appendChild(c);
+      });
+      var g = lib.groups.filter(function(x){ return x.id === libGroup; })[0];
+      var q = libQuery.trim().toLowerCase();
+      var items = lib.items.filter(function(i){
+        if (libGroup !== 'all' && i.group !== libGroup) return false;
+        return !q || [i.name, i.use, i.formula, i.note || ''].join(' ').toLowerCase().indexOf(q) >= 0;
+      });
+      hint.textContent = items.length ? (g ? g.hint : (lib.hintAll != null ? lib.hintAll : '상황을 고르거나 찾을 말을 입력하세요.')) : '찾는 내용이 없습니다. 다른 말로 찾아보거나, 아래 입력창에 하고 싶은 일을 그대로 적어 질문하세요.';
+      hint.hidden = !hint.textContent;
+      list.innerHTML = '';
+      items.forEach(function(i){
+        var card = document.createElement('article'); card.className = 'fn';
+        var top = document.createElement('div'); top.className = 'fn-top';
+        var nm = document.createElement('span'); nm.className = 'fn-name'; nm.textContent = i.name; top.appendChild(nm);
+        if (i.ver && lib.ver) { var ver = document.createElement('span'); ver.className = 'fn-ver' + (i.ver === '365' || i.ver === '2024' ? ' v365' : ''); ver.textContent = lib.ver[i.ver]; top.appendChild(ver); }
+        if (i.saved) { var sv = document.createElement('span'); sv.className = 'fn-ver'; sv.textContent = i.saved + ' 저장'; top.appendChild(sv); }
+        card.appendChild(top);
+        var use = document.createElement('p'); use.className = 'fn-use'; use.textContent = i.use; card.appendChild(use);
+        var pre = document.createElement('pre'); pre.className = 'fn-code'; var code = document.createElement('code'); code.textContent = i.formula; pre.appendChild(code);
+        var cp = document.createElement('button'); cp.type = 'button'; cp.className = 'cpy'; cp.textContent = '복사'; cp.addEventListener('click', function(){ copyText(code, cp); }); pre.appendChild(cp);
+        card.appendChild(pre);
+        if (i.parts && i.parts.length) {
+          var dl = document.createElement('dl'); dl.className = 'fn-parts';
+          i.parts.forEach(function(pt){ var dt = document.createElement('dt'); dt.textContent = pt[0]; var dd = document.createElement('dd'); dd.textContent = pt[1]; dl.appendChild(dt); dl.appendChild(dd); });
+          card.appendChild(dl);
+          if (i.tip) { var tp = document.createElement('p'); tp.className = 'fn-note'; tp.textContent = i.tip; card.appendChild(tp); }
+        } else if (i.note) { var nt = document.createElement('p'); nt.className = 'fn-note'; nt.textContent = i.note; card.appendChild(nt); }
+        var ask = document.createElement('button'); ask.type = 'button'; ask.className = 'fn-ask'; ask.textContent = lib.askLabel || '이 상황으로 질문하기';
+        ask.addEventListener('click', function(){ $('q').value = i.ask; $('q').focus(); $('composer').scrollIntoView({ block: 'nearest' }); });
+        card.appendChild(ask);
+        list.appendChild(card);
+      });
+    }
+    search.addEventListener('input', function(){ libQuery = search.value; draw(); });
+    draw();
+    $('log').appendChild(el);
+    if (scroll) el.scrollIntoView({ block: 'start' });
+  }
+  function addMsg(role, content){
+    var d = document.createElement('div');
+    d.className = 'msg ' + (role === 'user' ? 'user' : 'bot');
+    if (role === 'user') d.textContent = content;
+    else { d.classList.add('md'); renderMd(d, content); }
+    var empty = $('log').querySelector('.empty'); if (empty) empty.remove();
+    $('log').appendChild(d);
+    return d;
+  }
+
+  /* ---------- prompt ---------- */
+  function rules(a){
+    var others = AGENTS.filter(function(o){ return o.id !== a.id; })
+      .map(function(o){ return '- ' + o.name + ': ' + o.scope; }).join('\n');
+    return [
+      '너는 아래 [에이전트 지침]과 [지식 파일]에 따라 동작하는 "' + a.name + '" 에이전트다. 이 대화의 모든 답변에 다음 규칙을 지켜라.',
+      '',
+      '[답변 규칙]',
+      '1. 이 에이전트의 담당 업무는 다음과 같다: ' + a.scope + '.',
+      '2. 답변은 반드시 [에이전트 지침]의 "출력 형식"과 작성 원칙, [지식 파일]의 양식을 따른다. 다른 형식이나 잡담으로 답하지 않는다.',
+      '3. 요청이 담당 업무 밖이면 내용에 답하지 말고, 아래 다른 에이전트 중 알맞은 에이전트 이름을 한두 문장으로 안내만 한다.',
+      others,
+      '4. 명령어(/로 시작) 없이 요청해도 담당 업무에 해당하면, 가장 알맞은 명령어로 해석해 그 형식으로 답한다.',
+      '5. 이 화면은 웹페이지다. 파일을 만들거나, JIRA·Excel 등 외부 도구에 연결하거나, 파일을 업로드받을 수 없다. 결과는 Markdown(표, 코드블록)으로 준다. 복사해서 붙여넣을 결과물은 코드블록에 넣는다.',
+      '6. 한국어로 답한다. 기획서나 사용자가 준 값(숫자, 이름, 키)은 바꾸지 않는다. 모르는 것은 지어내지 않고 확인이 필요하다고 말한다.',
+      a.extra ? '7. ' + a.extra : '',
+      '',
+      projectLines().length ? '[프로젝트 공통 정보]\n' + projectLines().join('\n') + '\n모든 에이전트가 함께 쓰는 정보다. 요청에 따로 적힌 값이 없으면 이 값을 쓴다. (예: 버그 리포트 환경의 빌드·서버, TC 테스트 정보의 Spec Key·Document·Data, JQL의 프로젝트 키·라벨, 메일의 보고 대상과 서명) 여기에 없는 값은 지어내지 않는다.\n' : '',
+      '[에이전트 지침]',
+      a.instr,
+      '',
+      '[지식 파일]',
+      a.know
+    ].join('\n');
+  }
+
+  /* ---------- send ---------- */
+  function setBusy(b){
+    busy = b; $('send').disabled = b || !sampleReady; $('stop').hidden = !b; $('clear').disabled = b;
+  }
+  function errCopy(code){
+    switch(code){
+      case 'not_granted': case 'sampling_disabled': case 'not_declared': case 'capability_disabled': case 'capability_removed':
+        return '이 페이지에서 Claude 사용이 허용되지 않았습니다.';
+      case 'rate_limited': return '요청이 너무 많거나 사용량 한도에 도달했습니다. 잠시 후 다시 보내 주세요.';
+      case 'session_expired': return 'claude.ai에 다시 로그인한 뒤 보내 주세요.';
+      case 'prompt_too_large': return '대화가 너무 길어졌습니다. 대화 지우기 후 다시 보내 주세요.';
+      case 'refused': return '이 요청에는 답할 수 없습니다. 내용을 바꿔서 보내 주세요.';
+      case 'empty_completion': return '답변이 비어 있습니다. 요청을 조금 더 구체적으로 써 주세요.';
+      default: return '답변 중 연결이 끊겼습니다. 다시 보내 주세요.';
+    }
+  }
+  $('composer').addEventListener('submit', function(ev){ ev.preventDefault(); send(); });
+  $('q').addEventListener('keydown', function(ev){ if (ev.key === 'Enter' && (ev.ctrlKey || ev.metaKey)) { ev.preventDefault(); send(); } });
+  $('stop').addEventListener('click', function(){ if (ctl) ctl.abort(); });
+  $('clear').addEventListener('click', function(){ if (busy) return; histories[current] = []; saveHist(); renderLog(); });
+
+  async function send(){
+    var text = $('q').value.trim();
+    if (!text || busy || !sample || !current) return;
+    var id = current, a = byId[id];
+    var turns = histories[id] = (histories[id] || []);
+    turns.push({role:'user', content:text});
+    while (turns.length > 16) turns.shift();
+    while (turns.length && turns[0].role !== 'user') turns.shift();
+    saveHist();
+    $('q').value = '';
+    addMsg('user', text);
+    var bubble = addMsg('assistant', '');
+    bubble.classList.add('pending'); bubble.textContent = '답변을 작성하는 중입니다...';
+    bubble.scrollIntoView({block:'nearest'});
+    setBusy(true);
+    ctl = new AbortController();
+    var input = [{role:'user', content: rules(a)}].concat(turns);
+    try {
+      var res = await sample(input, {
+        cache: false, signal: ctl.signal,
+        onText: function(u){ if (current !== id) return; bubble.classList.remove('pending'); renderMd(bubble, u.text); }
+      });
+      turns.push({role:'assistant', content: res.text}); saveHist();
+      if (current === id) { renderMd(bubble, res.text); if (res.truncated) { var n = document.createElement('div'); n.className = 'err'; n.textContent = '답변이 길어서 중간에 끊겼습니다. 나눠서 요청해 주세요.'; bubble.appendChild(n); } }
+    } catch(e){
+      var code = e && e.code;
+      if (e && e.text && code !== 'refused') { turns.push({role:'assistant', content: e.text}); saveHist(); }
+      if (current === id) {
+        bubble.classList.remove('pending');
+        if (e && e.text && code !== 'refused') renderMd(bubble, e.text); else bubble.textContent = '';
+        if (code !== 'cancelled') { var m = document.createElement('div'); m.className = 'err'; m.textContent = errCopy(code); bubble.appendChild(m); }
+        else if (!e.text) bubble.textContent = '멈췄습니다.';
+      }
+      if (['not_granted','sampling_disabled','not_declared','capability_disabled','capability_removed'].indexOf(code) >= 0) { sample = null; sampleReady = false; $('unavail').hidden = false; }
+    } finally {
+      ctl = null; setBusy(false);
+    }
+  }
+
+  /* ---------- shared settings (column rules, category presets, project info) ---------- */
+  var SET = { colRules: [], presets: {}, project: {} };
+  var STORE = { db: null, mode: 'local' };
+  var LKEY = 'qa-hub-settings-v1';
+  (function(){ try { var o = JSON.parse(localStorage.getItem(LKEY) || '{}') || {}; ['colRules','presets','project'].forEach(function(k){ if (o[k]) SET[k] = o[k]; }); } catch (e) {} })();
+  function saveLocal(){ try { localStorage.setItem(LKEY, JSON.stringify(SET)); } catch (e) {} }
+  function storeNote(){
+    var t = STORE.mode === 'db' ? '팀 공유 저장: 이 페이지를 쓰는 사람 모두에게 같은 설정이 적용됩니다.'
+      : STORE.mode === 'loading' ? '공유 설정을 불러오는 중입니다.'
+      : '이 브라우저에만 저장됩니다.';
+    document.querySelectorAll('.store-note').forEach(function(n){ n.textContent = t; });
+  }
+  function saveSetting(name, value){
+    SET[name] = value; saveLocal(); applySetting(name);
+    if (!STORE.db) return Promise.resolve('local');
+    return STORE.db.doc('settings/' + name).set({ value: JSON.parse(JSON.stringify(value)), updatedAt: Date.now() })
+      .then(function(){ return 'db'; }, function(){ STORE.db = null; STORE.mode = 'local'; storeNote(); return 'local'; });
+  }
+  function applySetting(name){
+    if (name === 'colRules') { renderRules(); if (CMP.A && CMP.B && CMP.A.heads && CMP.B.heads) { rebuildSettings(); } }
+    if (name === 'presets') updatePresetNote();
+    if (name === 'project') { fillProjectForm(); renderProjectSummary(); }
+  }
+  function connectDb(db){
+    STORE.db = db; STORE.mode = 'loading'; storeNote();
+    var pending = 3, timer = setTimeout(function(){ if (STORE.mode === 'loading') { STORE.mode = 'local'; storeNote(); } }, 10000);
+    ['colRules', 'presets', 'project'].forEach(function(name){
+      var first = true;
+      db.doc('settings/' + name).onSnapshot(function(snap){
+        if (snap.exists) { var v = snap.data().value; if (v) { SET[name] = JSON.parse(JSON.stringify(v)); saveLocal(); } }
+        applySetting(name);
+        if (first) { first = false; pending--; if (!pending) { clearTimeout(timer); STORE.mode = 'db'; storeNote(); } }
+      }, function(){ clearTimeout(timer); STORE.db = null; STORE.mode = 'local'; storeNote(); });
+    });
+  }
+
+  /* ---------- project info (8) ---------- */
+  var PROJ_FIELDS = [
+    ['game', '게임·프로젝트', '예: 프로젝트 R'], ['version', '업데이트 버전', '예: v1.8.0 천랑 업데이트'],
+    ['build', '빌드', '예: 1.8.0.1102'], ['server', '테스트 서버', '예: QA'],
+    ['specKey', 'Spec Key', '예: QA-1800'], ['jiraProject', 'JIRA 프로젝트 키', '예: QA'],
+    ['jiraLabel', 'JIRA 라벨', '예: CR_v180'], ['specDoc', '기획서', '예: v1.8.0 천랑 업데이트 기획서'],
+    ['dataDoc', '데이터 문서', '예: 데이터문서_v1.8.0.xlsx'], ['qaName', '담당 QA', '예: 홍길동'],
+    ['reportTo', '보고 대상', '예: 팀장님']
+  ];
+  (function(){
+    var f = $('proj-fields');
+    PROJ_FIELDS.forEach(function(p){
+      var l = document.createElement('label'); l.className = 'pf';
+      l.innerHTML = '<span></span><input type="text" autocomplete="off">';
+      l.querySelector('span').textContent = p[1];
+      var i = l.querySelector('input'); i.id = 'pj-' + p[0]; i.placeholder = p[2];
+      f.appendChild(l);
+    });
+  })();
+  function fillProjectForm(){
+    if ($('proj-form').contains(document.activeElement)) return;
+    PROJ_FIELDS.forEach(function(p){ $('pj-' + p[0]).value = (SET.project && SET.project[p[0]]) || ''; });
+  }
+  function projectLines(){
+    var pj = SET.project || {};
+    return PROJ_FIELDS.filter(function(p){ return pj[p[0]]; }).map(function(p){ return '- ' + p[1] + ': ' + pj[p[0]]; });
+  }
+  function renderProjectSummary(){
+    var pj = SET.project || {}, parts = [pj.version, pj.build && ('빌드 ' + pj.build), pj.jiraLabel && ('라벨 ' + pj.jiraLabel), pj.specKey].filter(Boolean);
+    $('proj-summary').textContent = parts.length ? parts.join(' · ') : '버전·빌드를 한 번 입력해 두면 모든 답변에 들어갑니다';
+  }
+  $('proj-form').addEventListener('submit', function(ev){
+    ev.preventDefault();
+    var v = {}; PROJ_FIELDS.forEach(function(p){ var x = $('pj-' + p[0]).value.trim(); if (x) v[p[0]] = x; });
+    $('proj-note').textContent = '저장하는 중입니다.';
+    saveSetting('project', v).then(function(m){ $('proj-note').textContent = m === 'db' ? '저장했습니다. 모든 에이전트에 적용됩니다.' : '저장했습니다. (이 브라우저에만 저장)'; });
+  });
+  function placeProjectBox(){}
+  (function(){
+    var dlg = $('proj-dialog');
+    $('proj-open').addEventListener('click', function(){ $('proj-note').textContent = ''; fillProjectForm(); if (dlg.showModal) dlg.showModal(); else dlg.setAttribute('open', ''); });
+    $('proj-close').addEventListener('click', function(){ if (dlg.close) dlg.close(); else dlg.removeAttribute('open'); });
+  })();
+
+  /* ---------- compare tool ---------- */
+  var CMP = { A: null, B: null };
+  var cmpLines = [], cmpStats = null, cmpFilter = 'diff', downloads = null;
+  var keySel = [], manualMap = {}, batchRows = [];
+
+  function colLetter(i){ var s = ''; i++; while (i > 0) { var m = (i - 1) % 26; s = String.fromCharCode(65 + m) + s; i = Math.floor((i - 1) / 26); } return s; }
+  function cellText(cell){
+    if (!cell) return '';
+    if (cell.w != null && cell.w !== '') return String(cell.w);
+    var v = cell.v;
+    if (v == null) return '';
+    if (v instanceof Date) return v.toISOString().slice(0,10);
+    if (typeof v === 'number') return String(Number(v.toPrecision(12)));
+    return String(v);
+  }
+  function sheetGrid(ws){
+    if (!ws || !ws['!ref']) return { v: [], t: [] };
+    var rg = XLSX.utils.decode_range(ws['!ref']);
+    (ws['!merges'] || []).forEach(function(m){
+      var top = ws[XLSX.utils.encode_cell(m.s)];
+      if (!top) return;
+      for (var r = m.s.r; r <= m.e.r; r++) for (var c = m.s.c; c <= m.e.c; c++) {
+        var a = XLSX.utils.encode_cell({r:r, c:c});
+        if (!ws[a] || ws[a].v == null || ws[a].v === '') ws[a] = top;
+      }
+    });
+    var V = [], Tx = [];
+    for (var r = 0; r <= rg.e.r; r++) {
+      var vr = [], tr = [];
+      for (var c = 0; c <= rg.e.c; c++) {
+        var cell = ws[XLSX.utils.encode_cell({r:r, c:c})];
+        vr.push(cell ? (cell.v == null ? '' : cell.v) : '');
+        tr.push(cellText(cell));
+      }
+      V.push(vr); Tx.push(tr);
+    }
+    return { v: V, t: Tx };
+  }
+  // 시트 하나를 헤더 + 데이터 행으로 읽기 (화면과 일괄 비교가 같이 씀)
+  function tableOf(wb, sheet, hdrRow, two){
+    var g = sheetGrid(wb.Sheets[sheet]);
+    var h = Math.max(1, parseInt(hdrRow, 10) || 1) - 1;
+    two = two && h > 0;
+    var width = 0; g.t.forEach(function(r){ width = Math.max(width, r.length); });
+    var child = g.t[h] || [], parent = two ? (g.t[h-1] || []) : [];
+    var last = '', heads = [], seen = {};
+    for (var c = 0; c < width; c++) {
+      var p = '';
+      if (two) { p = String(parent[c] || '').trim(); if (p) last = p; else p = last; }
+      var ch = String(child[c] || '').replace(/\s*\n\s*/g, ' ').trim();
+      var name = (two && p && ch && p !== ch) ? p + ' > ' + ch : (ch || p || '열 ' + colLetter(c));
+      if (seen[name]) { seen[name]++; name = name + ' (' + seen[name] + ')'; } else seen[name] = 1;
+      heads.push(name);
+    }
+    var rows = [];
+    for (var r = h + 1; r < g.v.length; r++) {
+      var tv = g.t[r];
+      if (!tv || tv.every(function(x){ return String(x).trim() === ''; })) continue;
+      rows.push({ n: r + 1, v: g.v[r], t: tv });
+    }
+    return { heads: heads, rows: rows, start: h + 2 };
+  }
+  function buildTable(side){
+    var src = CMP[side]; if (!src) return;
+    var s = side.toLowerCase();
+    var t = tableOf(src.wb, src.sheet, $('hdr-' + s).value, $('two-' + s).checked);
+    src.heads = t.heads; src.rows = t.rows;
+    $('info-' + s).textContent = (src.sample ? '예시 데이터 · ' : '') + '열 ' + t.heads.length + '개 · 데이터 행 ' + t.rows.length + '개 (' + t.start + '행부터)';
+  }
+  function setSource(side, wb, name, sample){
+    CMP[side] = { wb: wb, name: name, sheet: wb.SheetNames[0], sample: !!sample };
+    var sel = $('sheet-' + side.toLowerCase()); sel.innerHTML = '';
+    wb.SheetNames.forEach(function(n){ var o = document.createElement('option'); o.value = n; o.textContent = n; sel.appendChild(o); });
+    $('name-' + side.toLowerCase()).textContent = name;
+    cmpStats = null; cmpLines = []; manualMap = {}; batchRows = []; $('batch').hidden = true;
+    buildTable(side);
+    if (CMP.A && CMP.B) applyConfig(deriveConfig(catId)); else rebuildSettings();
+    $('result').hidden = true; updateCatInfo(); updateButtons();
+  }
+  function readFile(side, file){
+    if (!file) return;
+    if (!window.XLSX) { $('info-' + side.toLowerCase()).textContent = '엑셀 읽기 도구를 불러오지 못했습니다. 페이지를 새로 고쳐 주세요.'; return; }
+    var fr = new FileReader();
+    fr.onload = function(){
+      try { setSource(side, XLSX.read(new Uint8Array(fr.result), { type: 'array', cellDates: true }), file.name); }
+      catch (e) { $('info-' + side.toLowerCase()).textContent = '파일을 읽지 못했습니다. 엑셀 또는 CSV 파일인지 확인해 주세요.'; }
+    };
+    fr.readAsArrayBuffer(file);
+  }
+  ['a','b'].forEach(function(s){
+    var S = s.toUpperCase();
+    $('file-' + s).addEventListener('change', function(e){ readFile(S, e.target.files[0]); e.target.value = ''; });
+    var drop = $('file-' + s).parentNode;
+    drop.addEventListener('dragover', function(e){ e.preventDefault(); drop.classList.add('over'); });
+    drop.addEventListener('dragleave', function(){ drop.classList.remove('over'); });
+    drop.addEventListener('drop', function(e){ e.preventDefault(); drop.classList.remove('over'); readFile(S, e.dataTransfer.files[0]); });
+    $('paste-' + s + '-btn').addEventListener('click', function(){
+      var txt = $('paste-' + s).value;
+      if (!txt.trim() || !window.XLSX) return;
+      try { setSource(S, XLSX.read(txt, { type: 'string' }), '붙여넣은 표'); } catch (e) { $('info-' + s).textContent = '붙여넣은 내용을 표로 읽지 못했습니다.'; }
+    });
+    $('sheet-' + s).addEventListener('change', function(e){ if (!CMP[S]) return; CMP[S].sheet = e.target.value; resetResult(); buildTable(S); rebuildSettings(); updateCatInfo(); });
+    $('hdr-' + s).addEventListener('change', function(){ if (!CMP[S]) return; resetResult(); buildTable(S); rebuildSettings(); updateCatInfo(); });
+    $('two-' + s).addEventListener('change', function(){ if (!CMP[S]) return; resetResult(); buildTable(S); rebuildSettings(); updateCatInfo(); });
+  });
+
+  function resetResult(){ cmpStats = null; cmpLines = []; $('result').hidden = true; }
+  function nkey(s){ return String(s).toLowerCase().replace(/\s+/g, ''); }
+
+  /* ---------- column pairing rules (1) ---------- */
+  var BUILTIN_RULES = [
+    { ko: '파괴', en: ['destroy'] },
+    { ko: '분해', en: ['decompose'] },
+    { ko: '판매', en: ['sell'] },
+    { ko: '거래', en: ['trade'] }
+  ];
+  function allRules(){ return BUILTIN_RULES.concat(SET.colRules || []); }
+  function normCol(h){ return String(h).toLowerCase().replace(/[\s_\-]+/g, '').replace(/가능여부$|여부$|가능$/, '').replace(/(yn|flag)$/, ''); }
+  // 두 열 이름이 같은 열인지: 이름이 같거나, 같은 규칙 안에 함께 들어 있으면 같은 열
+  // (데이터 문서의 alias 열처럼 한 영문 열이 카테고리마다 다른 한글 열과 짝이 될 수 있음)
+  function colMatch(a, b){
+    var na = normCol(a), nb = normCol(b);
+    if (na === nb) return true;
+    return allRules().some(function(r){
+      var names = [normCol(r.ko)].concat((r.en || []).map(normCol));
+      return names.indexOf(na) >= 0 && names.indexOf(nb) >= 0;
+    });
+  }
+  function renderRules(){
+    var ul = $('rule-list'); ul.innerHTML = '';
+    allRules().forEach(function(r, i){
+      var li = document.createElement('li'); var builtin = i < BUILTIN_RULES.length;
+      li.innerHTML = '<b></b> = <code></code> ';
+      li.querySelector('b').textContent = r.ko;
+      li.querySelector('code').textContent = (r.en || []).join(' / ');
+      if (builtin) { var t = document.createElement('span'); t.className = 'muted'; t.textContent = '기본'; li.appendChild(t); }
+      else {
+        var x = document.createElement('button'); x.type = 'button'; x.className = 'rule-del'; x.textContent = '삭제'; x.setAttribute('aria-label', r.ko + ' 규칙 삭제');
+        x.addEventListener('click', function(){ var list = (SET.colRules || []).slice(); list.splice(i - BUILTIN_RULES.length, 1); saveSetting('colRules', list); });
+        li.appendChild(x);
+      }
+      ul.appendChild(li);
+    });
+    $('rule-count').textContent = '(' + allRules().length + '개)';
+  }
+  function addRule(ko, ens){
+    var list = JSON.parse(JSON.stringify(SET.colRules || []));
+    var hit = list.filter(function(r){ return normCol(r.ko) === normCol(ko); })[0];
+    if (hit) ens.forEach(function(e){ if (hit.en.map(normCol).indexOf(normCol(e)) < 0) hit.en.push(e); });
+    else list.push({ ko: ko, en: ens });
+    return list;
+  }
+  $('rule-add').addEventListener('click', function(){
+    var ko = $('rule-ko').value.trim(), ens = $('rule-en').value.split(',').map(function(x){ return x.trim(); }).filter(Boolean);
+    if (!ko || !ens.length) { $('rule-msg').textContent = '기획서 열 이름과 데이터 문서 열 이름을 모두 적어 주세요.'; return; }
+    saveSetting('colRules', addRule(ko, ens)); $('rule-ko').value = ''; $('rule-en').value = ''; $('rule-msg').textContent = '"' + ko + '" 규칙을 추가했습니다.';
+  });
+  function manualPairs(){
+    var out = [];
+    $('map').querySelectorAll('select').forEach(function(s){ if (s.value && !colMatch(s.dataset.a, s.value)) out.push([s.dataset.a, s.value]); });
+    return out;
+  }
+  function updateMapSave(){
+    var n = manualPairs().length, b = $('map-save');
+    b.disabled = !n; b.textContent = n ? '직접 고른 짝 ' + n + '개를 규칙으로 저장' : '직접 고른 짝 없음';
+  }
+  $('map-save').addEventListener('click', function(){
+    var pairs = manualPairs(); if (!pairs.length) return;
+    var list = SET.colRules || [];
+    pairs.forEach(function(p){ SET.colRules = list = addRule(p[0], [p[1]]); });
+    saveSetting('colRules', list);
+    $('rule-msg').textContent = '짝 ' + pairs.length + '개를 규칙으로 저장했습니다. 다음 파일부터 자동으로 짝지어집니다.';
+  });
+
+  function autoMap(aHeads, bHeads){
+    var m = {};
+    aHeads.forEach(function(h){
+      var exact = bHeads.filter(function(b){ return normCol(b) === normCol(h); })[0];
+      m[h] = exact || bHeads.filter(function(b){ return colMatch(h, b); })[0] || '';
+    });
+    return m;
+  }
+  function genericKey(heads){ return heads.filter(function(h){ return /alias|(^|[^a-z])id$|key|코드/i.test(h); })[0] || heads[0]; }
+  function rebuildSettings(){
+    var A = CMP.A, B = CMP.B;
+    var keys = $('keys'), tb = $('map').querySelector('tbody');
+    if (!A || !B || !A.heads || !B.heads) { keys.innerHTML = '<span class="muted">두 데이터를 불러오면 열 목록이 나옵니다.</span>'; tb.innerHTML = ''; updateMapSave(); return; }
+    keySel = keySel.filter(function(k){ return A.heads.indexOf(k) >= 0; });
+    if (!keySel.length) keySel = [genericKey(A.heads)];
+    keys.innerHTML = '';
+    A.heads.forEach(function(h){
+      var b = document.createElement('button'); b.type = 'button'; b.className = 'key'; b.textContent = h;
+      b.setAttribute('aria-pressed', keySel.indexOf(h) >= 0 ? 'true' : 'false');
+      b.addEventListener('click', function(){
+        var i = keySel.indexOf(h);
+        if (i >= 0) { if (keySel.length > 1) keySel.splice(i, 1); } else keySel.push(h);
+        resetResult(); rebuildSettings();
+      });
+      keys.appendChild(b);
+    });
+    tb.innerHTML = '';
+    var auto = autoMap(A.heads, B.heads);
+    A.heads.forEach(function(h, i){
+      var tr = document.createElement('tr');
+      var td1 = document.createElement('td'); td1.textContent = h + (keySel.indexOf(h) >= 0 ? '  · 기준' : '');
+      var td2 = document.createElement('td');
+      var sel = document.createElement('select'); sel.dataset.a = h; sel.id = 'map-' + i;
+      var o0 = document.createElement('option'); o0.value = ''; o0.textContent = '(비교 안 함)'; sel.appendChild(o0);
+      B.heads.forEach(function(bh){ var o = document.createElement('option'); o.value = bh; o.textContent = bh; sel.appendChild(o); });
+      sel.addEventListener('change', function(){ manualMap[h] = sel.value; resetResult(); updateMapSave(); });
+      if (manualMap[h] !== undefined && (manualMap[h] === '' || B.heads.indexOf(manualMap[h]) >= 0)) sel.value = manualMap[h];
+      else sel.value = auto[h];
+      td2.appendChild(sel); tr.appendChild(td1); tr.appendChild(td2); tb.appendChild(tr);
+    });
+    updateMapSave();
+  }
+
+  function normVal(v, o){
+    if (v instanceof Date) return { s: v.toISOString().slice(0,10), n: null };
+    var s = v == null ? '' : String(v);
+    if (o.trim) s = s.trim();
+    if (o.ci) s = s.toLowerCase();
+    if (o.yn) {
+      var yk = s.trim().toLowerCase();
+      if (yk === '가능' || yk === 'y' || yk === 'yes') s = 'Y';
+      else if (yk === '불가능' || yk === '불가' || yk === 'n' || yk === 'no') s = 'N';
+    }
+    var n = null;
+    if (o.num) {
+      if (typeof v === 'number') n = v;
+      else {
+        var t = s.replace(/,/g, '').trim(), pct = false;
+        if (/%$/.test(t)) { pct = true; t = t.slice(0, -1).trim(); }
+        if (/^[-+]?(\d+\.?\d*|\.\d+)(e[-+]?\d+)?$/i.test(t)) { n = Number(t); if (pct) n = n / 100; }
+      }
+    }
+    return { s: s, n: n };
+  }
+  function same(x, y, o){
+    if (o.num && x.n !== null && y.n !== null) return Math.abs(x.n - y.n) <= o.tol + 1e-9 * Math.max(1, Math.abs(x.n), Math.abs(y.n));
+    return x.s === y.s;
+  }
+  function currentOpts(){ return { trim: $('opt-trim').checked, ci: $('opt-case').checked, num: $('opt-num').checked, yn: $('opt-yn').checked, tol: Math.abs(parseFloat($('opt-tol').value) || 0) }; }
+
+  // 화면 비교와 일괄 비교가 같이 쓰는 비교 본체
+  function compareCore(tA, tB, keys, mapObj, o, rowsA, rowsB){
+    var map = [];
+    Object.keys(mapObj).forEach(function(a){ var b = mapObj[a]; if (b && tA.heads.indexOf(a) >= 0 && tB.heads.indexOf(b) >= 0) map.push({ a: a, ai: tA.heads.indexOf(a), bi: tB.heads.indexOf(b), b: b }); });
+    map.sort(function(x, y){ return x.ai - y.ai; });
+    var keyMap = keys.map(function(k){ return map.filter(function(m){ return m.a === k; })[0]; });
+    if (!keys.length || keyMap.some(function(m){ return !m; })) return { error: 'key' };
+    if (!rowsA.length || !rowsB.length) return { error: rowsA.length ? 'noB' : 'noA' };
+    var kIdxA = keyMap.map(function(m){ return m.ai; }), kIdxB = keyMap.map(function(m){ return m.bi; });
+    function keyOf(row, idx){ var parts = idx.map(function(i){ return normVal(row.v[i], o).s; }); return parts.every(function(p){ return p === ''; }) ? null : parts.join(' | '); }
+    function keyText(row, idx){ return idx.map(function(i){ return row.t[i]; }).join(' | '); }
+    var mA = new Map(), mB = new Map(), dupA = 0, dupB = 0, lines = [];
+    rowsA.forEach(function(r){ var k = keyOf(r, kIdxA); if (k === null) return; if (mA.has(k)) { dupA++; lines.push({ st: 'dup', key: keyText(r, kIdxA), ra: r.n, rb: '', col: 'A에 같은 기준 값이 또 있음', a: '', b: '' }); } else mA.set(k, r); });
+    rowsB.forEach(function(r){ var k = keyOf(r, kIdxB); if (k === null) return; if (mB.has(k)) { dupB++; lines.push({ st: 'dup', key: keyText(r, kIdxB), ra: '', rb: r.n, col: 'B에 같은 기준 값이 또 있음', a: '', b: '' }); } else mB.set(k, r); });
+    var cmpCols = map.filter(function(m){ return keys.indexOf(m.a) < 0; });
+    var st = { a: rowsA.length, b: rowsB.length, totA: tA.rows.length, totB: tB.rows.length, same: 0, diffRows: 0, diffCells: 0, onlyA: 0, onlyB: 0, dup: dupA + dupB };
+    var body = [];
+    mA.forEach(function(ra, k){
+      var rb = mB.get(k), kt = keyText(ra, kIdxA);
+      if (!rb) { st.onlyA++; body.push({ st: 'onlyA', key: kt, ra: ra.n, rb: '', col: '', a: '', b: '' }); return; }
+      var diffs = [];
+      cmpCols.forEach(function(m){
+        if (!same(normVal(ra.v[m.ai], o), normVal(rb.v[m.bi], o), o)) diffs.push({ st: 'diff', key: kt, ra: ra.n, rb: rb.n, col: m.a === m.b ? m.a : m.a + ' → ' + m.b, a: ra.t[m.ai], b: rb.t[m.bi] });
+      });
+      if (diffs.length) { st.diffRows++; st.diffCells += diffs.length; body = body.concat(diffs); }
+      else { st.same++; body.push({ st: 'same', key: kt, ra: ra.n, rb: rb.n, col: '', a: '', b: '' }); }
+    });
+    mB.forEach(function(rb, k){ if (!mA.has(k)) { st.onlyB++; body.push({ st: 'onlyB', key: keyText(rb, kIdxB), ra: '', rb: rb.n, col: '', a: '', b: '' }); } });
+    return { lines: body.concat(lines), st: st };
+  }
+
+  function currentMap(){ var m = {}; $('map').querySelectorAll('select').forEach(function(s){ m[s.dataset.a] = s.value; }); return m; }
+  function runCompare(){
+    var A = CMP.A, B = CMP.B;
+    if (!A || !B) return;
+    var r = compareCore(A, B, keySel, currentMap(), currentOpts(), filterRows('A'), filterRows('B'));
+    if (r.error === 'key') { $('act-note').textContent = ''; alertBox('기준 열이 B 데이터의 어느 열과 짝인지 "비교할 열"에서 골라 주세요.'); return; }
+    if (r.error) { alertBox((r.error === 'noA' ? 'A' : 'B') + ' 데이터에서 "' + catName() + '" 카테고리에 해당하는 행을 찾지 못했습니다. 찾을 열이나 키워드를 바꿔 보세요.'); return; }
+    r.st.cat = catName();
+    cmpLines = r.lines; cmpStats = r.st;
+    cmpFilter = r.st.diffCells ? 'diff' : (r.st.onlyA + r.st.onlyB ? 'onlyA' : 'all');
+    if (cmpFilter === 'onlyA' && !r.st.onlyA) cmpFilter = 'onlyB';
+    renderResult();
+  }
+  function alertBox(msg){ $('result').hidden = false; $('res-cat').textContent = ''; $('sum').innerHTML = ''; $('filters').innerHTML = ''; $('res').innerHTML = ''; $('res-more').textContent = msg; }
+
+  var LABEL = { diff: '불일치', onlyA: 'A에만', onlyB: 'B에만', same: '일치', dup: '중복 기준' };
+  function renderResult(){
+    var st = cmpStats; $('result').hidden = false;
+    $('res-cat').textContent = st.cat ? '카테고리: ' + st.cat + ' · A ' + st.totA + '행 중 ' + st.a + '행, B ' + st.totB + '행 중 ' + st.b + '행 비교' : '';
+    var tiles = [
+      ['', st.a, 'A 데이터 행'], ['', st.b, 'B 데이터 행'], ['ok', st.same, '일치하는 행'],
+      ['bad', st.diffRows, '불일치 행 (칸 ' + st.diffCells + '개)'], ['warn', st.onlyA, 'A에만 있는 행'], ['warn', st.onlyB, 'B에만 있는 행']
+    ];
+    $('sum').innerHTML = '';
+    tiles.forEach(function(t){ var d = document.createElement('div'); d.className = 'stat ' + t[0]; d.innerHTML = '<b></b><span></span>'; d.querySelector('b').textContent = t[1]; d.querySelector('span').textContent = t[2]; $('sum').appendChild(d); });
+    var counts = { all: cmpLines.length, diff: st.diffCells, onlyA: st.onlyA, onlyB: st.onlyB, same: st.same, dup: st.dup };
+    $('filters').innerHTML = '';
+    [['diff','불일치 칸'],['onlyA','A에만'],['onlyB','B에만'],['same','일치'],['dup','중복 기준'],['all','전체']].forEach(function(f){
+      if (f[0] === 'dup' && !counts.dup) return;
+      var b = document.createElement('button'); b.type = 'button'; b.className = 'flt'; b.setAttribute('role','tab');
+      b.textContent = f[1] + ' ' + counts[f[0]]; b.setAttribute('aria-selected', cmpFilter === f[0] ? 'true' : 'false');
+      b.addEventListener('click', function(){ cmpFilter = f[0]; renderResult(); });
+      $('filters').appendChild(b);
+    });
+    renderRows();
+  }
+  function visibleLines(){
+    var q = $('res-q').value.trim().toLowerCase();
+    return cmpLines.filter(function(l){
+      if (cmpFilter !== 'all' && l.st !== cmpFilter) return false;
+      if (!q) return true;
+      return [l.key, l.col, l.a, l.b].join(' ').toLowerCase().indexOf(q) >= 0;
+    });
+  }
+  function renderRows(){
+    var vis = visibleLines(), LIM = 1000, t = $('res');
+    t.innerHTML = '<thead><tr><th>상태</th><th>기준 값</th><th>A 행</th><th>B 행</th><th>열</th><th>A 값</th><th>B 값</th></tr></thead>';
+    var tb = document.createElement('tbody');
+    vis.slice(0, LIM).forEach(function(l){
+      var tr = document.createElement('tr');
+      function td(txt, cls){ var d = document.createElement('td'); if (cls) d.className = cls; d.textContent = txt; tr.appendChild(d); return d; }
+      var s = td(''); var p = document.createElement('span'); p.className = 'pill ' + l.st; p.textContent = LABEL[l.st]; s.appendChild(p);
+      td(l.key, 'k'); td(l.ra); td(l.rb); td(l.col);
+      if (l.st === 'diff') {
+        var a = td('', 'diff'); var sa = document.createElement('span'); sa.className = 'a'; sa.textContent = l.a === '' ? '(빈칸)' : l.a; a.appendChild(sa);
+        var b = td('', 'diff'); var sb = document.createElement('span'); sb.className = 'b'; sb.textContent = l.b === '' ? '(빈칸)' : l.b; b.appendChild(sb);
+      } else { td(l.a); td(l.b); }
+      tb.appendChild(tr);
+    });
+    t.appendChild(tb);
+    $('res-more').textContent = vis.length > LIM ? '처음 ' + LIM + '줄만 보여줍니다. 전체 ' + vis.length + '줄은 결과 엑셀 저장으로 확인하세요.' : (vis.length ? '' : '해당하는 항목이 없습니다.');
+  }
+  $('res-q').addEventListener('input', renderRows);
+  $('run').addEventListener('click', runCompare);
+
+  function projHead(){
+    var pj = SET.project || {}, env = [pj.build && ('빌드 ' + pj.build), pj.server && ('서버 ' + pj.server)].filter(Boolean).join(', ');
+    var t = '';
+    if (pj.version) t += '- 업데이트: ' + pj.version + '\n';
+    if (env) t += '- 환경: ' + env + '\n';
+    if (pj.jiraLabel) t += '- 라벨: ' + pj.jiraLabel + '\n';
+    if (pj.specKey) t += '- 관련 이슈: ' + pj.specKey + '\n';
+    return t;
+  }
+  function linesAoa(list){ return [['상태','기준 값','A 행','B 행','열','A 값','B 값']].concat(list.map(function(l){ return [LABEL[l.st], l.key, l.ra, l.rb, l.col, l.a, l.b]; })); }
+  $('act-copy').addEventListener('click', function(){
+    var btn = this, txt = linesAoa(visibleLines()).map(function(r){ return r.map(function(c){ return String(c).replace(/[\t\n]/g, ' '); }).join('\t'); }).join('\n');
+    function done(m){ btn.textContent = m; setTimeout(function(){ btn.textContent = '불일치 표 복사'; }, 1500); }
+    try { navigator.clipboard.writeText(txt).then(function(){ done('복사됨 · 엑셀에 붙여넣기'); }, function(){ done('복사 안 됨'); }); } catch (e) { done('복사 안 됨'); }
+  });
+  $('act-save').addEventListener('click', async function(){
+    if (!downloads || !cmpStats) return;
+    var st = cmpStats, wb = XLSX.utils.book_new(), pj = SET.project || {};
+    var summary = [['항목','값']];
+    if (pj.version) summary.push(['업데이트', pj.version]);
+    if (pj.build) summary.push(['빌드', pj.build]);
+    summary = summary.concat([['A 데이터', CMP.A.name + ' / ' + CMP.A.sheet], ['B 데이터', CMP.B.name + ' / ' + CMP.B.sheet], ['카테고리', st.cat || '전체'], ['기준 열', keySel.join(', ')],
+      ['A 데이터 행', st.a], ['B 데이터 행', st.b], ['일치하는 행', st.same], ['불일치 행', st.diffRows], ['불일치 칸', st.diffCells], ['A에만 있는 행', st.onlyA], ['B에만 있는 행', st.onlyB], ['중복 기준 값', st.dup]]);
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(summary), '요약');
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(linesAoa(cmpLines.filter(function(l){ return l.st !== 'same'; }))), '차이 목록');
+    if (batchRows.length) XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(batchAoa()), '전체 카테고리');
+    var buf = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+    try { await downloads.save({ filename: '데이터비교_결과.xlsx', data: new Blob([buf]) }); $('act-note').textContent = '저장했습니다.'; }
+    catch (e) { $('act-note').textContent = (e && e.code === 'declined') ? '' : '저장하지 못했습니다.'; }
+  });
+  $('act-jira').addEventListener('click', function(){
+    if (!cmpStats) return;
+    var st = cmpStats, diffs = cmpLines.filter(function(l){ return l.st === 'diff'; }).slice(0, 20);
+    var onlyA = cmpLines.filter(function(l){ return l.st === 'onlyA'; }).slice(0, 10), onlyB = cmpLines.filter(function(l){ return l.st === 'onlyB'; }).slice(0, 10);
+    var t = '/버그 ' + (st.cat ? '[' + st.cat + '] ' : '') + '기준 데이터(A: ' + CMP.A.name + ')와 비교 데이터(B: ' + CMP.B.name + ')를 기준 열 [' + keySel.join(', ') + ']으로 비교한 결과, 값이 다른 항목이 있습니다.\n';
+    t += projHead();
+    t += '- 불일치 행 ' + st.diffRows + '개 (칸 ' + st.diffCells + '개), A에만 있는 행 ' + st.onlyA + '개, B에만 있는 행 ' + st.onlyB + '개\n';
+    if (diffs.length) { t += '\n불일치 목록' + (st.diffCells > diffs.length ? ' (앞 ' + diffs.length + '개)' : '') + '\n| 기준 값 | 열 | A 값 | B 값 |\n|---|---|---|---|\n'; diffs.forEach(function(l){ t += '| ' + l.key + ' | ' + l.col + ' | ' + (l.a || '(빈칸)') + ' | ' + (l.b || '(빈칸)') + ' |\n'; }); }
+    if (onlyA.length) t += '\nA에만 있는 기준 값: ' + onlyA.map(function(l){ return l.key; }).join(', ') + (st.onlyA > onlyA.length ? ' 외 ' + (st.onlyA - onlyA.length) + '개' : '') + '\n';
+    if (onlyB.length) t += 'B에만 있는 기준 값: ' + onlyB.map(function(l){ return l.key; }).join(', ') + (st.onlyB > onlyB.length ? ' 외 ' + (st.onlyB - onlyB.length) + '개' : '') + '\n';
+    location.hash = 'jira'; showAgent('jira');
+    $('q').value = t; $('q').focus();
+  });
+
+  /* ---------- categories + presets (2) ---------- */
+  var CATS = [
+    { id: 'all', name: '전체', hint: '분류 없이 전체 비교' },
+    { id: 'item', name: '신규 아이템 속성', hint: '아이템 능력치, 등급, 거래 여부',
+      words: ['신규 아이템','아이템','item','장비','equip','속성','능력치','stat'], keys: ['item_id','아이템 id','아이템id','아이템 alias','alias','id','코드'] },
+    { id: 'bm', name: 'BM 보상·구성품', hint: '상품, 패키지 구성품, 가격',
+      words: ['bm','상품','패키지','package','shop','상점','구성품','product','캐시','cash'], keys: ['상품 id','상품id','product_id','패키지 id','alias','id','코드'] },
+    { id: 'dungeon', name: '던전 드랍 보상', hint: '던전·보스 드랍 아이템과 확률',
+      words: ['던전','dungeon','드랍','드롭','drop','보스','boss','몬스터','monster'], keys: ['드랍 id','drop_id','alias','id','코드'] },
+    { id: 'event', name: '이벤트 획득 보상', hint: '이벤트, 출석, 미션, 쿠폰 보상',
+      words: ['이벤트','event','출석','미션','mission','쿠폰','coupon','시즌','패스','pass'], keys: ['이벤트 id','event_id','보상 id','alias','id','코드'] }
+  ];
+  var catId = 'all';
+  function catDef(id){ return CATS.filter(function(c){ return c.id === id; })[0]; }
+  function catObj(){ return catDef(catId); }
+  function catName(){ return catId === 'all' ? '' : catObj().name; }
+  function presetOf(id){ return (SET.presets || {})[id] || null; }
+  function wordsFor(id){ var p = presetOf(id); if (p && p.words != null) return p.words; return (catDef(id).words || []).join(', '); }
+  function splitWords(s){ return String(s).split(',').map(function(w){ return w.trim().toLowerCase(); }).filter(Boolean); }
+  function curWords(){ return splitWords($('cat-words').value); }
+  function hasWord(text, words){ var t = String(text).toLowerCase(); return words.some(function(w){ return t.indexOf(w) >= 0; }); }
+  var CAT_COL_RE = /분류|카테고리|category|구분|type|타입|획득처|source|출처|콘텐츠|content|그룹|group/i;
+
+  function renderCats(){
+    var sel = $('cat-select');
+    if (!sel.options.length) {
+      CATS.forEach(function(c){ var o = document.createElement('option'); o.value = c.id; o.textContent = c.name; sel.appendChild(o); });
+      sel.addEventListener('change', function(){ selectCat(sel.value); });
+    }
+    sel.value = catId;
+    $('cat-hint').textContent = catObj().hint;
+  }
+  function sheetScore(wb, name, words){
+    var sc = hasWord(name, words) ? 10 : 0;
+    try {
+      var aoa = XLSX.utils.sheet_to_json(wb.Sheets[name], { header: 1, defval: '', range: 0 }).slice(0, 4);
+      aoa.forEach(function(r){ r.forEach(function(c){ if (c !== '' && hasWord(c, words)) sc++; }); });
+    } catch (e) {}
+    return sc;
+  }
+  function pickSheet(wb, words, current){
+    if (wb.SheetNames.length < 2 || !words.length) return current;
+    var best = current, bestSc = 0;
+    wb.SheetNames.forEach(function(n){ var sc = sheetScore(wb, n, words); if (sc > bestSc) { bestSc = sc; best = n; } });
+    return bestSc > 0 ? best : current;
+  }
+  function findColIdx(heads, choice){
+    if (choice === '__auto') { for (var i = 0; i < heads.length; i++) if (CAT_COL_RE.test(heads[i])) return i; return -1; }
+    return choice ? heads.indexOf(choice) : -1;
+  }
+  function filterRowsPure(tbl, sheet, id, words, findCol, sheetWhole){
+    if (id === 'all' || !words.length) return tbl.rows;
+    if (sheetWhole && hasWord(sheet, words)) return tbl.rows;
+    var ci = findColIdx(tbl.heads, findCol);
+    return tbl.rows.filter(function(r){ return ci >= 0 ? hasWord(r.t[ci], words) : r.t.some(function(c){ return hasWord(c, words); }); });
+  }
+  function filterRows(side){
+    var src = CMP[side]; if (!src) return [];
+    return filterRowsPure(src, src.sheet, catId, curWords(), $('cat-col').value || '__auto', $('cat-sheet').checked);
+  }
+  function guessKey(id, heads){
+    var c = catDef(id);
+    if (c && c.keys) for (var i = 0; i < c.keys.length; i++) {
+      var hit = heads.filter(function(h){ return nkey(h).indexOf(nkey(c.keys[i])) >= 0; })[0];
+      if (hit) return hit;
+    }
+    return genericKey(heads);
+  }
+  // 카테고리 하나의 비교 설정을 정함: 저장된 설정이 있으면 그것, 없으면 자동
+  function deriveConfig(id){
+    var A = CMP.A, B = CMP.B, p = presetOf(id);
+    var cfg = { id: id, preset: !!p };
+    cfg.words = wordsFor(id);
+    var words = splitWords(cfg.words);
+    cfg.findCol = p && p.findCol != null ? p.findCol : '__auto';
+    cfg.sheetWhole = p && p.sheetWhole != null ? p.sheetWhole : true;
+    cfg.hdrA = p && p.hdrA ? p.hdrA : $('hdr-a').value; cfg.twoA = p && p.twoA != null ? p.twoA : $('two-a').checked;
+    cfg.hdrB = p && p.hdrB ? p.hdrB : $('hdr-b').value; cfg.twoB = p && p.twoB != null ? p.twoB : $('two-b').checked;
+    if (id === 'all') { cfg.sheetA = A.sheet; cfg.sheetB = B.sheet; }
+    else {
+      cfg.sheetA = p && p.sheetA && A.wb.SheetNames.indexOf(p.sheetA) >= 0 ? p.sheetA : pickSheet(A.wb, words, A.sheet);
+      cfg.sheetB = p && p.sheetB && B.wb.SheetNames.indexOf(p.sheetB) >= 0 ? p.sheetB : pickSheet(B.wb, words, B.sheet);
+    }
+    cfg.tA = tableOf(A.wb, cfg.sheetA, cfg.hdrA, cfg.twoA);
+    cfg.tB = tableOf(B.wb, cfg.sheetB, cfg.hdrB, cfg.twoB);
+    var validKeys = p && p.keys && p.keys.length && p.keys.every(function(k){ return cfg.tA.heads.indexOf(k) >= 0; });
+    if (validKeys) cfg.keys = p.keys.slice();
+    else if (id === 'all' && keySel.length && keySel.every(function(k){ return cfg.tA.heads.indexOf(k) >= 0; })) cfg.keys = keySel.slice();
+    else cfg.keys = [guessKey(id, cfg.tA.heads)];
+    cfg.map = autoMap(cfg.tA.heads, cfg.tB.heads);
+    if (p && p.map) Object.keys(p.map).forEach(function(a){ var b = p.map[a]; if (cfg.tA.heads.indexOf(a) >= 0 && (b === '' || cfg.tB.heads.indexOf(b) >= 0)) cfg.map[a] = b; });
+    cfg.opts = p && p.opts ? p.opts : currentOpts();
+    return cfg;
+  }
+  function applyConfig(cfg){
+    $('cat-words').value = cfg.words; $('cat-sheet').checked = cfg.sheetWhole;
+    $('hdr-a').value = cfg.hdrA; $('two-a').checked = cfg.twoA; $('hdr-b').value = cfg.hdrB; $('two-b').checked = cfg.twoB;
+    CMP.A.sheet = cfg.sheetA; $('sheet-a').value = cfg.sheetA; CMP.B.sheet = cfg.sheetB; $('sheet-b').value = cfg.sheetB;
+    buildTable('A'); buildTable('B');
+    keySel = cfg.keys.slice(); manualMap = JSON.parse(JSON.stringify(cfg.map));
+    $('opt-trim').checked = !!cfg.opts.trim; $('opt-case').checked = !!cfg.opts.ci; $('opt-num').checked = !!cfg.opts.num; $('opt-yn').checked = cfg.opts.yn !== false; $('opt-tol').value = cfg.opts.tol || 0;
+    rebuildSettings(); rebuildCatCols(cfg.findCol); updateCatInfo(); updatePresetNote();
+  }
+  function rebuildCatCols(want){
+    var sel = $('cat-col'), prev = want != null ? want : (sel.value || '__auto'); sel.innerHTML = '';
+    var opts = [['__auto','자동 (분류·구분 열)'], ['','모든 열']], seen = {};
+    ['A','B'].forEach(function(S){ (CMP[S] && CMP[S].heads || []).forEach(function(h){ if (!seen[h]) { seen[h] = 1; opts.push([h, h]); } }); });
+    opts.forEach(function(o){ var e = document.createElement('option'); e.value = o[0]; e.textContent = o[1]; sel.appendChild(e); });
+    sel.value = seen[prev] || prev === '' || prev === '__auto' ? prev : '__auto';
+  }
+  function describe(side){
+    var src = CMP[side]; if (!src || !src.rows) return side + ': 데이터 없음';
+    var rows = filterRows(side), how;
+    if ($('cat-sheet').checked && hasWord(src.sheet, curWords())) how = '시트 "' + src.sheet + '" 전체';
+    else { var ci = findColIdx(src.heads, $('cat-col').value || '__auto'); how = '시트 "' + src.sheet + '"의 ' + (ci >= 0 ? '"' + src.heads[ci] + '" 열' : '모든 열') + '에서 키워드 검색'; }
+    return side + ': ' + how + ' → ' + src.rows.length + '행 중 ' + rows.length + '행';
+  }
+  function updateCatInfo(){
+    if (catId === 'all') return;
+    if (!$('cat-col').options.length) rebuildCatCols();
+    $('cat-info').textContent = describe('A') + '  ·  ' + describe('B');
+  }
+  function updatePresetNote(){
+    var p = presetOf(catId), n = $('preset-note');
+    if (p) { var d = new Date(p.savedAt || 0); n.textContent = '저장된 설정 적용 중 · ' + (d.getMonth() + 1) + '/' + d.getDate() + ' ' + String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0') + ' 저장'; }
+    else n.textContent = '저장된 설정 없음 · 자동으로 맞춤';
+    $('preset-clear').hidden = !p;
+  }
+  function updateButtons(){ var ok = !!(CMP.A && CMP.B); $('preset-save').disabled = !ok; $('batch-run').disabled = !ok; }
+  function selectCat(id){
+    catId = id; renderCats();
+    $('cat-panel').hidden = id === 'all';
+    resetResult();
+    if (CMP.A && CMP.B) { applyConfig(deriveConfig(id)); runCompare(); }
+    else { $('cat-words').value = wordsFor(id); updatePresetNote(); }
+  }
+  $('preset-save').addEventListener('click', function(){
+    if (!CMP.A || !CMP.B) return;
+    var presets = JSON.parse(JSON.stringify(SET.presets || {}));
+    presets[catId] = {
+      words: $('cat-words').value, findCol: $('cat-col').value || '__auto', sheetWhole: $('cat-sheet').checked,
+      sheetA: CMP.A.sheet, sheetB: CMP.B.sheet, hdrA: $('hdr-a').value, twoA: $('two-a').checked, hdrB: $('hdr-b').value, twoB: $('two-b').checked,
+      keys: keySel.slice(), map: currentMap(), opts: currentOpts(), savedAt: Date.now()
+    };
+    saveSetting('presets', presets).then(function(m){ $('preset-msg').textContent = '"' + (catName() || '전체') + '" 설정을 저장했습니다' + (m === 'db' ? '.' : ' (이 브라우저에만).'); });
+  });
+  $('preset-clear').addEventListener('click', function(){
+    var presets = JSON.parse(JSON.stringify(SET.presets || {})); delete presets[catId];
+    saveSetting('presets', presets); $('preset-msg').textContent = '저장한 설정을 지웠습니다. 다음 비교부터 자동으로 맞춥니다.';
+  });
+  $('cat-words').addEventListener('change', function(){ resetResult(); updateCatInfo(); });
+  $('cat-col').addEventListener('change', function(){ resetResult(); updateCatInfo(); });
+  $('cat-sheet').addEventListener('change', function(){ resetResult(); updateCatInfo(); });
+  $('cat-reset').addEventListener('click', function(){ $('cat-words').value = (catObj().words || []).join(', '); resetResult(); updateCatInfo(); });
+
+  /* ---------- batch compare (4) ---------- */
+  var SHORT_ERR = { key: '기준 열 짝 필요', noA: 'A에 해당 데이터 없음', noB: 'B에 해당 데이터 없음' };
+  function runBatch(){
+    if (!CMP.A || !CMP.B) return;
+    batchRows = CATS.filter(function(c){ return c.id !== 'all'; }).map(function(c){
+      var cfg = deriveConfig(c.id);
+      var rowsA = filterRowsPure(cfg.tA, cfg.sheetA, c.id, splitWords(cfg.words), cfg.findCol, cfg.sheetWhole);
+      var rowsB = filterRowsPure(cfg.tB, cfg.sheetB, c.id, splitWords(cfg.words), cfg.findCol, cfg.sheetWhole);
+      var r = compareCore(cfg.tA, cfg.tB, cfg.keys, cfg.map, cfg.opts, rowsA, rowsB);
+      return { id: c.id, name: c.name, sheetA: cfg.sheetA, sheetB: cfg.sheetB, keys: cfg.keys, preset: cfg.preset, err: r.error || '', st: r.st || null };
+    });
+    renderBatch();
+  }
+  function batchStatus(b){
+    if (b.err) return ['warn', SHORT_ERR[b.err]];
+    var n = b.st.diffCells + b.st.onlyA + b.st.onlyB;
+    return n ? ['bad', '차이 ' + n + '건'] : ['ok', '차이 없음'];
+  }
+  function batchAoa(){
+    return [['카테고리','A 시트','B 시트','기준 열','설정','일치','불일치 칸','A에만','B에만','상태']].concat(batchRows.map(function(b){
+      var s = b.st || {};
+      return [b.name, b.sheetA, b.sheetB, b.keys.join(' + '), b.preset ? '저장된 설정' : '자동', b.st ? s.same : '', b.st ? s.diffCells : '', b.st ? s.onlyA : '', b.st ? s.onlyB : '', batchStatus(b)[1]];
+    }));
+  }
+  function renderBatch(){
+    var t = $('batch-table'); t.innerHTML = '';
+    var head = document.createElement('thead'); head.innerHTML = '<tr><th>카테고리</th><th>A 시트 → B 시트</th><th>기준 열</th><th>일치</th><th>불일치 칸</th><th>A에만</th><th>B에만</th><th>상태</th><th></th></tr>';
+    t.appendChild(head);
+    var tb = document.createElement('tbody');
+    var tot = { cells: 0, a: 0, b: 0 };
+    batchRows.forEach(function(b){
+      var tr = document.createElement('tr');
+      function td(x, cls){ var d = document.createElement('td'); if (cls) d.className = cls; d.textContent = x; tr.appendChild(d); return d; }
+      td(b.name); td(b.sheetA + ' → ' + b.sheetB, 'k'); td(b.keys.join(' + ') + (b.preset ? ' · 저장된 설정' : ''));
+      var s = b.st || {};
+      td(b.st ? s.same : '-'); td(b.st ? s.diffCells : '-'); td(b.st ? s.onlyA : '-'); td(b.st ? s.onlyB : '-');
+      if (b.st) { tot.cells += s.diffCells; tot.a += s.onlyA; tot.b += s.onlyB; }
+      var bs = batchStatus(b), sd = td(''); var pill = document.createElement('span'); pill.className = 'pill ' + (bs[0] === 'ok' ? 'same' : bs[0] === 'bad' ? 'diff' : 'onlyA'); pill.textContent = bs[1]; sd.appendChild(pill);
+      var ad = td(''); var btn = document.createElement('button'); btn.type = 'button'; btn.className = 'mini'; btn.textContent = b.err ? '설정하기' : '결과 보기';
+      btn.addEventListener('click', function(){ selectCat(b.id); $('result').scrollIntoView({ block: 'start' }); });
+      ad.appendChild(btn);
+      tb.appendChild(tr);
+    });
+    t.appendChild(tb);
+    $('batch-sum').textContent = '카테고리 4개 · 불일치 칸 ' + tot.cells + '개 · A에만 ' + tot.a + '행 · B에만 ' + tot.b + '행';
+    $('batch').hidden = false;
+  }
+  $('batch-run').addEventListener('click', function(){ runBatch(); $('batch').scrollIntoView({ block: 'start' }); });
+  $('batch-copy').addEventListener('click', function(){
+    var btn = this, txt = batchAoa().map(function(r){ return r.join('\t'); }).join('\n');
+    function done(m){ btn.textContent = m; setTimeout(function(){ btn.textContent = '요약 표 복사'; }, 1500); }
+    try { navigator.clipboard.writeText(txt).then(function(){ done('복사됨'); }, function(){ done('복사 안 됨'); }); } catch (e) { done('복사 안 됨'); }
+  });
+  renderCats(); renderRules(); fillProjectForm(); renderProjectSummary(); updatePresetNote(); updateButtons(); storeNote();
+
+  function loadExample(){
+    if (!window.XLSX) return;
+    var H = ['분류','보상 alias','보상 이름','수량','획득 확률'];
+    var a = [H,
+      ['신규 아이템','ITEM_SWD_101','청룡검',1,'100%'],['신규 아이템','ITEM_RNG_102','백호 반지',1,'100%'],
+      ['BM 상품','PKG_GROW_01','성장 패키지 강화석',100,'100%'],['BM 상품','PKG_GROW_02','성장 패키지 골드',50000,'100%'],
+      ['던전 드랍','DGN_FIRE_01','화염 정수',3,'25%'],['던전 드랍','DGN_FIRE_02','화염 보주',1,'2.5%'],
+      ['이벤트','EVT_ATT_07','출석 7일 상자',1,'100%'],['이벤트','EVT_MSN_03','미션 보상 강화석',20,'100%']];
+    var b = [H,
+      ['신규 아이템','ITEM_SWD_101','청룡검 ',1,1],['신규 아이템','ITEM_RNG_102','백호 반지',1,1],
+      ['BM 상품','PKG_GROW_01','성장 패키지 강화석',100,1],['BM 상품','PKG_GROW_02','성장 패키지 골드',30000,1],
+      ['던전 드랍','DGN_FIRE_01','화염 정수',3,0.25],['던전 드랍','DGN_FIRE_02','화염 보주',1,0.02],
+      ['이벤트','EVT_ATT_07','출석 7일 상자',1,1],['이벤트','EVT_MSN_04','미션 보상 골드',20,1]];
+    function wbOf(aoa){ var wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(aoa), 'Sheet1'); return wb; }
+    keySel = ['보상 alias'];
+    setSource('A', wbOf(a), '예시_기획데이터.xlsx', true);
+    setSource('B', wbOf(b), '예시_추출데이터.xlsx', true);
+    runCompare();
+  }
+
+  (function(){
+    function sync(){ $('out-empty').hidden = !($('result').hidden && $('batch').hidden); }
+    var mo = new MutationObserver(sync);
+    mo.observe($('result'), { attributes: true, attributeFilter: ['hidden'] });
+    mo.observe($('batch'), { attributes: true, attributeFilter: ['hidden'] });
+    sync();
+  })();
+
+  /* ---------- boot ---------- */
+  setBusy(false);
+  route();
+  $('act-save').hidden = true;
+  try { loadExample(); } catch (e) {}
+  if (window.claude && typeof window.claude.use === 'function') {
+    window.claude.use('downloads').then(function(d){ downloads = d; $('act-save').hidden = !d; }, function(){});
+    window.claude.use('db').then(function(db){ if (db) connectDb(db); else { STORE.mode = 'local'; storeNote(); } }, function(){ STORE.mode = 'local'; storeNote(); });
+    window.claude.use('sample').then(function(s){
+      sample = s; sampleReady = !!s; $('unavail').hidden = !!s; setBusy(busy);
+    }, function(){ $('unavail').hidden = false; });
+  } else { $('unavail').hidden = false; }
+})();
+</script>
